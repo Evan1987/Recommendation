@@ -1,4 +1,5 @@
 # based on https://github.com/thunlp/TensorFlow-TransX
+# according to http://www.aaai.org/ocs/index.php/AAAI/AAAI14/paper/download/8531/8546
 
 import os
 import random
@@ -6,8 +7,7 @@ import numpy as np
 import itertools as it
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from collections import defaultdict
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 
 
 class TransH(object):
@@ -39,13 +39,14 @@ class TransH(object):
         self.id2rel = {}  # id: (ent, type)
         self.id2ent = {}  # id: rel
 
-        # 实体起始位置记录，便于sampling负样本
-        self.ent_position_collection = defaultdict(int)  # (id, position): num
-
         self.ent_index = 0  # 初始实体编号
         self.rel_index = 0  # 初始关系编号
 
-        self.triplets: List[Tuple[int]] = self.collect(triplets)
+        # 计算各个关系的tph(#{tail entities} per head), pth(#{head entities} per tail)
+        # rel: (tph, pth)
+        self.rel_mapping_summary = {}
+
+        self.triplets: Set[Tuple[int]] = set(self.collect(triplets))
 
         # 不同类型的实体集合 type: [id]
         self.ent_type_collection = {key: [id_ for id_, type_ in group]
@@ -105,9 +106,19 @@ class TransH(object):
                 sub_id = self.add_ent_to_collection(sub, self.default_ent_type)
                 obj_id = self.add_ent_to_collection(obj, self.default_ent_type)
 
-            self.ent_position_collection[(sub_id, "sub")] += 1
-            self.ent_position_collection[(obj_id, "obj")] += 1
             res.append((sub_id, rel_id, obj_id))
+
+        # 统计每种关系的tph和pth
+        group = it.groupby(res, key=lambda tup: tup[1])
+        for rel, iters in group:
+            subs, objs = [], []
+            for sub, _, obj in iters:
+                subs.append(sub)
+                objs.append(obj)
+            tph = len(set(objs)) / len(set(subs))
+            pth = 1 / tph
+            self.rel_mapping_summary[rel] = (tph, pth)
+
         return res
 
     def _build_session(self):
@@ -164,18 +175,21 @@ class TransH(object):
                 with tf.name_scope("hinge_loss"):
                     pos_loss = tf.reduce_sum(tf.squared_difference(pos_sub_e + pos_rel_e, pos_obj_e), axis=1)
                     neg_loss = tf.reduce_sum(tf.squared_difference(neg_sub_e + neg_rel_e, neg_obj_e), axis=1)
-                    hinge_loss = tf.reduce_sum(tf.nn.relu(self.gamma + pos_loss - neg_loss))
+                    hinge_loss = tf.reduce_mean(tf.nn.relu(self.gamma + pos_loss - neg_loss))
 
                 with tf.name_scope("scale_loss"):
                     # sum_e [|e|^2 - 1]+
-                    scale_loss = tf.reduce_sum(tf.nn.relu(tf.norm(self.e_embedding, axis=1) - 1.0), name="scale_loss")
+                    all_e = tf.concat([pos_sub_e, pos_obj_e, neg_sub_e, neg_obj_e], axis=0)
+                    scale_loss = tf.reduce_mean(tf.nn.relu(tf.norm(all_e, axis=1) - 1.0), name="scale_loss")
 
                 with tf.name_scope("orthogonal_loss"):
                     # sum_r [<wr, dr>^2 / |dr|^2 - epsilon]+
-                    normed_w = tf.nn.l2_normalize(self.w_embedding, dim=-1)
-                    inner_product = tf.reduce_sum(normed_w * self.r_embedding, axis=1)
-                    l2_r = tf.norm(self.r_embedding, axis=1)
-                    orthogonal_loss = tf.reduce_sum(tf.nn.relu(inner_product ** 2 / l2_r - self.epsilon))
+                    all_w = tf.concat([pos_w, neg_w], axis=0)
+                    all_r = tf.concat([pos_rel_e, neg_rel_e], axis=0)
+                    normed_w = tf.nn.l2_normalize(all_w, dim=-1)
+                    inner_product = tf.reduce_sum(normed_w * all_r, axis=1)
+                    l2_r = tf.norm(all_r, axis=1)
+                    orthogonal_loss = tf.reduce_mean(tf.nn.relu(inner_product ** 2 / l2_r - self.epsilon))
 
                 self.loss = hinge_loss + self.C * (scale_loss + orthogonal_loss)
 
@@ -192,13 +206,8 @@ class TransH(object):
             neg = pos.copy()
 
             # 通过加权随机选择改变sub还是obj，1vN的多给予sub机会，Nv1的多给予obj机会
-            sub_weight = self.ent_position_collection[(sub, "sub")]
-            obj_weight = self.ent_position_collection[(obj, "obj")]
-            total_weight = sub_weight + obj_weight
-            sub_weight /= total_weight
-            obj_weight /= total_weight
-
-            change_index = np.random.choice([0, 2], p=[sub_weight, obj_weight])  # 0->sub, 2->obj
+            tph, pth = self.rel_mapping_summary[rel]
+            change_index = np.random.choice([0, 2], p=[tph / (tph + pth), pth / (tph + pth)])  # 0->sub, 2->obj
             _, type_ = self.id2ent[pos[change_index]]
             while True:
                 temp = random.sample(self.ent_type_collection[type_], 1)[0]

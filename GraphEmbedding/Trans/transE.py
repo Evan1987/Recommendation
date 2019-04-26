@@ -6,13 +6,12 @@ import numpy as np
 import itertools as it
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from collections import namedtuple
-from typing import Optional, Set
+from typing import List, Optional, Tuple, Set
 
 
 class TransE(object):
-    def __init__(self, *, triplets, entity_label_sep: Optional[str]=None, margin: float=1.0,
-                 batch_size: int=64, learning_rate: float=1e-5, dim: int=10):
+    def __init__(self, *, triplets, entity_label_sep: Optional[str]=None, margin: float=1.0, batch_size: int=64,
+                 learning_rate: float=0.01, dim: int=50):
         """
         :param entity_label_sep: 标识 entity与其类型的分隔符，如果为 None，则表示没有注释类型
         :param triplets: 可迭代的三元组集合
@@ -38,8 +37,7 @@ class TransE(object):
         self.ent_index = 0  # 初始实体编号
         self.rel_index = 0  # 初始关系编号
 
-        self.Triplet = namedtuple("Triplet", ["sub", "rel", "obj"])  # 其实定义这个没啥用，只是恰巧看见了感受下
-        self.triplets: Set[self.Triplet] = set(self.collect(triplets))
+        self.triplets: Set[Tuple[int]] = set(self.collect(triplets))
 
         # 不同类型的实体集合 type: [id]
         self.ent_type_collection = {key: [id_ for id_, type_ in group]
@@ -99,8 +97,8 @@ class TransE(object):
                 sub_id = self.add_ent_to_collection(sub, self.default_ent_type)
                 obj_id = self.add_ent_to_collection(obj, self.default_ent_type)
 
-            triplet = self.Triplet(sub=sub_id, rel=rel_id, obj=obj_id)
-            res.append(triplet)
+            res.append((sub_id, rel_id, obj_id))
+
         return res
 
     def _build_session(self):
@@ -110,38 +108,61 @@ class TransE(object):
         sess = tf.Session(graph=self.graph, config=config)
         return sess
 
+    def calc(self, e, w):
+        w = tf.nn.l2_normalize(w, dim=-1)
+        return e - tf.reduce_sum(e * w, axis=1, keep_dims=True) * w
+
     def _build_graph(self):
         tf.reset_default_graph()
         graph = tf.Graph()
         with graph.as_default():
-            with tf.name_scope("embedding"):
-                initializer = tf.random_uniform_initializer(minval=-6/(self.k ** 0.5), maxval=6/(self.k ** 0.5))
-                self.embedding = tf.get_variable("embedding",
-                                                 shape=[len(self.ent2id) + len(self.rel2id), self.k],
-                                                 initializer=initializer)
             with tf.name_scope("input"):
-                self.input = tf.placeholder(dtype=tf.int32, shape=[None, 6])  # :3为pos 3:为neg
-                batch = tf.nn.embedding_lookup(self.embedding, self.input)  # shape: [batch_size, 3, k]
-                batch /= tf.norm(batch, axis=-1, keep_dims=True)  # L2 normed
+                self.pos_sub = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="pos_sub")
+                self.pos_rel = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="pos_rel")
+                self.pos_obj = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="pos_obj")
+
+                self.neg_sub = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="neg_sub")
+                self.neg_rel = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="neg_rel")
+                self.neg_obj = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="neg_obj")
+
+            with tf.name_scope("embedding"):
+                initializer = tf.contrib.layers.xavier_initializer(uniform=False)
+                self.e_embedding = tf.get_variable("e_embedding",
+                                                   shape=[len(self.ent2id), self.k],
+                                                   initializer=initializer)
+                self.r_embedding = tf.get_variable("r_embedding",
+                                                   shape=[len(self.rel2id), self.k],
+                                                   initializer=initializer)
+
+                pos_sub_e = tf.nn.embedding_lookup(self.e_embedding, self.pos_sub, name="pos_sub_e")  # [None, k]
+                pos_rel_e = tf.nn.embedding_lookup(self.r_embedding, self.pos_rel, name="pos_rel_e")  # [None, k]
+                pos_obj_e = tf.nn.embedding_lookup(self.e_embedding, self.pos_obj, name="pos_obj_e")  # [None, k]
+
+                neg_sub_e = tf.nn.embedding_lookup(self.e_embedding, self.neg_sub, name="neg_sub_e")  # [None, k]
+                neg_rel_e = tf.nn.embedding_lookup(self.r_embedding, self.neg_rel, name="neg_rel_e")  # [None, k]
+                neg_obj_e = tf.nn.embedding_lookup(self.e_embedding, self.neg_obj, name="neg_obj_e")  # [None, k]
+
+                pos_sub_e, pos_obj_e, neg_sub_e, neg_obj_e =\
+                    map(lambda x: tf.nn.l2_normalize(x, dim=-1), [pos_sub_e, pos_obj_e, neg_sub_e, neg_obj_e])
 
             with tf.name_scope("loss"):
-                pos_loss = tf.reduce_sum(tf.squared_difference(batch[:, 0, :] + batch[:, 1, :], batch[:, 2, :]), axis=1)
-                neg_loss = tf.reduce_sum(tf.squared_difference(batch[:, 3, :] + batch[:, 4, :], batch[:, 5, :]), axis=1)
-                self.loss = tf.reduce_mean(tf.nn.relu(self.gamma + pos_loss - neg_loss))
+                with tf.name_scope("hinge_loss"):
+                    pos_loss = tf.reduce_sum(tf.squared_difference(pos_sub_e + pos_rel_e, pos_obj_e), axis=1)
+                    neg_loss = tf.reduce_sum(tf.squared_difference(neg_sub_e + neg_rel_e, neg_obj_e), axis=1)
+                    self.loss = tf.reduce_mean(tf.nn.relu(self.gamma + pos_loss - neg_loss))
 
             with tf.name_scope("opt"):
-                self.train_op = tf.train.AdamOptimizer(self.alpha).minimize(self.loss)
+                self.train_op = tf.train.GradientDescentOptimizer(self.alpha).minimize(self.loss)
 
             self.init = tf.global_variables_initializer()
         return graph
 
     def get_batch(self):
-        ent_num = len(self.ent2id)
         batch = []
         for sub, rel, obj in self.triplets:
-            pos = [sub, rel + ent_num, obj]  # rel的索引叠加上ent的数量，方便embedding取数
+            pos = [sub, rel, obj]
             neg = pos.copy()
-            # 通过随机数选择改变sub还是obj
+
             change_index = np.random.choice([0, 2])  # 0->sub, 2->obj
             _, type_ = self.id2ent[pos[change_index]]
             while True:
@@ -163,7 +184,12 @@ class TransE(object):
             loss_collection = []
             batches = self.get_batch()
             for batch in batches:
-                loss, _ = self.sess.run([self.loss, self.train_op], feed_dict={self.input: batch})
+                batch = np.asarray(batch)
+                feed_dict = {}
+                for i, input_ in enumerate([self.pos_sub, self.pos_rel, self.pos_obj,
+                                            self.neg_sub, self.neg_rel, self.neg_obj]):
+                    feed_dict[input_] = batch[:, i].reshape(-1, 1)
+                loss, _ = self.sess.run([self.loss, self.train_op], feed_dict=feed_dict)
                 loss_collection.append(loss)
             avg_loss = np.mean(loss_collection)
             print("Epoch: %d, Avg.loss: %.4f" % (epoch, avg_loss))
@@ -175,10 +201,10 @@ class TransE(object):
         assert os.path.isdir(save_path), "%s is not a valid path" % save_path
 
         # save vectors
-        vectors = self.sess.run(self.embedding)
-        vectors /= np.linalg.norm(vectors, axis=-1, keepdims=True)
-        ent_vectors = vectors[:len(self.ent2id)].astype(str)
-        rel_vectors = vectors[len(self.ent2id):].astype(str)
+        ent_vectors = self.sess.run(self.e_embedding).astype(str)
+        rel_vectors = self.sess.run(self.r_embedding).astype(str)
+        ent_vectors /= np.linalg.norm(ent_vectors, axis=-1, keepdims=True)
+        rel_vectors /= np.linalg.norm(rel_vectors, axis=-1, keepdims=True)
 
         print("**** Writing Entities ****")
         with open(save_path + "ent.vec", "w") as f:
@@ -211,7 +237,7 @@ def read_file(file_path):
 if __name__ == '__main__':
     path = "F:/Code projects/Python/Recommendation/GraphEmbedding/test_data/WN18/"
     triplets = read_file(path + "train.txt")
-    model = TransE(triplets=triplets, margin=1.0, learning_rate=1e-5, dim=10, batch_size=128)
+    model = TransE(triplets=triplets, margin=1.0, learning_rate=0.01, dim=10, batch_size=64)
     print("Num of Ent: %d,  Num of Rel: %d" % (len(model.ent2id), len(model.rel2id)))
     tf.summary.FileWriter("F:/board/TransE/", model.graph)
     model.train(15000)  # very slow

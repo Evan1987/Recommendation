@@ -117,13 +117,13 @@ class TransE(object):
         graph = tf.Graph()
         with graph.as_default():
             with tf.name_scope("input"):
-                self.pos_sub = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="pos_sub")
-                self.pos_rel = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="pos_rel")
-                self.pos_obj = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="pos_obj")
+                self.pos_sub = tf.placeholder(dtype=tf.int32, shape=[None], name="pos_sub")
+                self.pos_rel = tf.placeholder(dtype=tf.int32, shape=[None], name="pos_rel")
+                self.pos_obj = tf.placeholder(dtype=tf.int32, shape=[None], name="pos_obj")
 
-                self.neg_sub = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="neg_sub")
-                self.neg_rel = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="neg_rel")
-                self.neg_obj = tf.placeholder(dtype=tf.int32, shape=[None, 1], name="neg_obj")
+                self.neg_sub = tf.placeholder(dtype=tf.int32, shape=[None], name="neg_sub")
+                self.neg_rel = tf.placeholder(dtype=tf.int32, shape=[None], name="neg_rel")
+                self.neg_obj = tf.placeholder(dtype=tf.int32, shape=[None], name="neg_obj")
 
             with tf.name_scope("embedding"):
                 initializer = tf.contrib.layers.xavier_initializer(uniform=False)
@@ -188,7 +188,7 @@ class TransE(object):
                 feed_dict = {}
                 for i, input_ in enumerate([self.pos_sub, self.pos_rel, self.pos_obj,
                                             self.neg_sub, self.neg_rel, self.neg_obj]):
-                    feed_dict[input_] = batch[:, i].reshape(-1, 1)
+                    feed_dict[input_] = batch[:, i]
                 loss, _ = self.sess.run([self.loss, self.train_op], feed_dict=feed_dict)
                 loss_collection.append(loss)
             avg_loss = np.mean(loss_collection)

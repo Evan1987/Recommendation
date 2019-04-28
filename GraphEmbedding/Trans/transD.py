@@ -1,5 +1,5 @@
 # based on https://github.com/thunlp/TensorFlow-TransX
-# according to http://aaai.org/ocs/index.php/AAAI/AAAI15/paper/download/9571/9523
+# according to https://aclweb.org/anthology/P15-1067
 
 import os
 import random
@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from typing import List, Optional, Tuple, Set
 
 
-class TransR(object):
+class TransD(object):
     def __init__(self, *, triplets, entity_label_sep: Optional[str]=None, margin: float=1.0, batch_size: int=64,
                  learning_rate: float=0.01, dimE: int=50, dimR: int=10, C: float=0.25):
         """
@@ -128,6 +128,25 @@ class TransR(object):
         sess = tf.Session(graph=self.graph, config=config)
         return sess
 
+    def calc(self, e, et, rt):
+        """
+        将实体 e 动态映射至关系向量空间 e' = (rt * et^T + I_m*n) * e
+        :param e: 实体向量
+        :param et: 实体重构向量
+        :param rt: 关系重构向量
+        :return: 实体向量映射转换后的向量
+        """
+        # @ is simple way of tf.matmul
+        if self.dimR >= self.dimE:
+            x = tf.reduce_sum(e * et, axis=1, keep_dims=True) * rt\
+                + tf.pad(e, paddings=[[0, 0], [0, self.dimR - self.dimE]], constant_values=0)
+            # tf.concat([e, tf.zeros(shape=[tf.shape(e)[0], self.dimR - self.dimE], dtype=tf.float32)], axis=1)
+
+        else:
+            x = tf.reduce_sum(e * et, axis=1, keep_dims=True) * rt\
+                + e[:, :self.dimR]
+        return tf.nn.l2_normalize(x, dim=1)
+
     def _build_graph(self):
         tf.reset_default_graph()
         graph = tf.Graph()
@@ -146,31 +165,42 @@ class TransR(object):
                 self.e_embedding = tf.get_variable("e_embedding",
                                                    shape=[len(self.ent2id), self.dimE],
                                                    initializer=initializer)
+                
                 self.r_embedding = tf.get_variable("r_embedding",
                                                    shape=[len(self.rel2id), self.dimR],
                                                    initializer=initializer)
-                self.rel_matrix = tf.get_variable("rel_matrix",
-                                                  shape=[len(self.rel2id), self.dimE * self.dimR],
+                
+                self.e_transfer = tf.get_variable("e_transfer",
+                                                  shape=[len(self.ent2id), self.dimE],
+                                                  initializer=initializer)
+                
+                self.r_transfer = tf.get_variable("r_transfer", 
+                                                  shape=[len(self.rel2id), self.dimR], 
                                                   initializer=initializer)
 
-                pos_sub_e = tf.reshape(tf.nn.embedding_lookup(self.e_embedding, self.pos_sub), [-1, self.dimE, 1])
-                pos_rel_e = tf.reshape(tf.nn.embedding_lookup(self.r_embedding, self.pos_rel), [-1, self.dimR])
-                pos_obj_e = tf.reshape(tf.nn.embedding_lookup(self.e_embedding, self.pos_obj), [-1, self.dimE, 1])
+                pos_sub_e = tf.nn.embedding_lookup(self.e_embedding, self.pos_sub)
+                pos_rel_e = tf.nn.embedding_lookup(self.r_embedding, self.pos_rel)
+                pos_obj_e = tf.nn.embedding_lookup(self.e_embedding, self.pos_obj)
+                
+                pos_sub_t = tf.nn.embedding_lookup(self.e_transfer, self.pos_sub)
+                pos_rel_t = tf.nn.embedding_lookup(self.r_transfer, self.pos_rel)
+                pos_obj_t = tf.nn.embedding_lookup(self.e_transfer, self.pos_obj)
 
-                neg_sub_e = tf.reshape(tf.nn.embedding_lookup(self.e_embedding, self.neg_sub), [-1, self.dimE, 1])
-                neg_rel_e = tf.reshape(tf.nn.embedding_lookup(self.r_embedding, self.neg_rel), [-1, self.dimR])
-                neg_obj_e = tf.reshape(tf.nn.embedding_lookup(self.e_embedding, self.neg_obj), [-1, self.dimE, 1])
+                neg_sub_e = tf.nn.embedding_lookup(self.e_embedding, self.neg_sub)
+                neg_rel_e = tf.nn.embedding_lookup(self.r_embedding, self.neg_rel)
+                neg_obj_e = tf.nn.embedding_lookup(self.e_embedding, self.neg_obj)
+
+                neg_sub_t = tf.nn.embedding_lookup(self.e_transfer, self.neg_sub)
+                neg_rel_t = tf.nn.embedding_lookup(self.r_transfer, self.neg_rel)
+                neg_obj_t = tf.nn.embedding_lookup(self.e_transfer, self.neg_obj)
 
                 all_e = tf.concat([pos_sub_e, pos_obj_e, neg_sub_e, neg_obj_e], axis=0)
                 all_r = tf.concat([pos_rel_e, neg_rel_e], axis=0)
 
-                pos_m = tf.reshape(tf.nn.embedding_lookup(self.rel_matrix, self.pos_rel), [-1, self.dimR, self.dimE])
-                neg_m = tf.reshape(tf.nn.embedding_lookup(self.rel_matrix, self.neg_rel), [-1, self.dimR, self.dimE])
-
-                pos_sub_e = tf.nn.l2_normalize(tf.reshape(tf.matmul(pos_m, pos_sub_e), [-1, self.dimR]), dim=1)
-                pos_obj_e = tf.nn.l2_normalize(tf.reshape(tf.matmul(pos_m, pos_obj_e), [-1, self.dimR]), dim=1)
-                neg_sub_e = tf.nn.l2_normalize(tf.reshape(tf.matmul(neg_m, neg_sub_e), [-1, self.dimR]), dim=1)
-                neg_obj_e = tf.nn.l2_normalize(tf.reshape(tf.matmul(neg_m, neg_obj_e), [-1, self.dimR]), dim=1)
+                pos_sub_e = self.calc(pos_sub_e, pos_sub_t, pos_rel_t)
+                pos_obj_e = self.calc(pos_obj_e, pos_obj_t, pos_rel_t)
+                neg_sub_e = self.calc(neg_sub_e, neg_sub_t, neg_rel_t)
+                neg_obj_e = self.calc(neg_obj_e, neg_obj_t, neg_rel_t)
 
             with tf.name_scope("loss"):
                 with tf.name_scope("hinge_loss"):
@@ -239,7 +269,8 @@ class TransR(object):
         # save vectors
         ent_vectors = self.sess.run(self.e_embedding).astype(str)
         rel_vectors = self.sess.run(self.r_embedding).astype(str)
-        matrix = self.sess.run(self.rel_matrix).astype(str)
+        ent_transfer = self.sess.run(self.e_transfer).astype(str)
+        rel_transfer = self.sess.run(self.r_transfer).astype(str)
 
         print("**** Writing Entities ****")
         with open(save_path + "ent.vec", "w") as f:
@@ -257,10 +288,18 @@ class TransR(object):
                 f.write(str(i) + "\t" + rel + "\t" + (",".join(vec)))
                 f.write("\n")
 
-        print("**** Writing Transform Matrix ****")
-        with open(save_path + "matrix.vec", "w") as f:
+        print("**** Writing Entity Transfer Vectors ****")
+        with open(save_path + "ent_transfer.vec", "w") as f:
+            f.write("id\tent\tvec\n")
+            for i, vec in enumerate(ent_transfer):
+                ent = self.id2ent[i]
+                f.write(str(i) + "\t" + ent + "\t" + (",".join(vec)))
+                f.write("\n")
+
+        print("**** Writing Relation Transfer Vectors ****")
+        with open(save_path + "rel_transfer.vec", "w") as f:
             f.write("id\trel\tvec\n")
-            for i, vec in enumerate(matrix):
+            for i, vec in enumerate(rel_transfer):
                 rel = self.id2rel[i]
                 f.write(str(i) + "\t" + rel + "\t" + (",".join(vec)))
                 f.write("\n")
@@ -280,8 +319,8 @@ def read_file(file_path):
 if __name__ == '__main__':
     path = "F:/Code projects/Python/Recommendation/GraphEmbedding/test_data/WN18/"
     triplets = read_file(path + "train.txt")
-    model = TransR(triplets=triplets, margin=1.0, learning_rate=0.01, dimE=20, dimR=20, batch_size=64)
+    model = TransD(triplets=triplets, margin=1.0, learning_rate=0.01, dimE=20, dimR=30, batch_size=64, C=1.)
     print("Num of Ent: %d,  Num of Rel: %d" % (len(model.ent2id), len(model.rel2id)))
-    tf.summary.FileWriter("F:/board/TransR/", model.graph)
+    tf.summary.FileWriter("F:/board/TransD/", model.graph)
     model.train(15000)  # very slow
     model.save(path + "vec/")

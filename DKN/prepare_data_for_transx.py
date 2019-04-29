@@ -39,7 +39,7 @@ class KG4Trans(object):
 
     def extract(self):
         ent_cnt, rel_cnt = 0, 0
-        triplet_encoding_file = os.path.join(self.output_path, "triplet_encoding.txt")
+        triplet_encoding_file = os.path.join(self.output_path, "triplet2id.txt")
         entity2id_file = os.path.join(self.output_path, "entity2id.txt")
         relation2id_file = os.path.join(self.output_path, "relation2id.txt")
 

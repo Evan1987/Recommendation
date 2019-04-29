@@ -37,16 +37,33 @@ class KG4Trans(object):
             link_index = collection[obj]
         return link_index, index
 
+    def read(self):
+        ent_cnt, rel_cnt = 0, 0
+        count = 0
+        with open(self.kg_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    head, rel, tail = line.split("\t")
+                    head_index, ent_cnt = self._add_to_collection(head, self.entity2id, ent_cnt)
+                    tail_index, ent_cnt = self._add_to_collection(tail, self.entity2id, ent_cnt)
+                    rel_index, rel_cnt = self._add_to_collection(rel, self.relation2id, rel_cnt)
+                    count += 1
+                    yield (head_index, tail_index, rel_index)
+
+
     def extract(self):
         ent_cnt, rel_cnt = 0, 0
-        triplet_encoding_file = os.path.join(self.output_path, "triplet2id.txt")
+        triplet2id_file = os.path.join(self.output_path, "triplet2id.txt")
         entity2id_file = os.path.join(self.output_path, "entity2id.txt")
         relation2id_file = os.path.join(self.output_path, "relation2id.txt")
 
         # encoding triplet and collect entity & relation to dict
         print("Saving encoded triplets")
         with open(self.kg_file, "r", encoding="utf-8") as fr, \
-                open(triplet_encoding_file, "w", encoding="utf-8") as fw:
+                open(triplet2id_file, "w", encoding="utf-8") as fw:
+
+
             for line in fr:
                 line = line.strip()
                 if line:
@@ -55,16 +72,21 @@ class KG4Trans(object):
                     tail_index, ent_cnt = self._add_to_collection(tail, self.entity2id, ent_cnt)
                     rel_index, rel_cnt = self._add_to_collection(rel, self.relation2id, rel_cnt)
                     fw.write("%d\t%d\t%d\n" % (head_index, tail_index, rel_index))
+                    count += 1
+            fw.seek(0, 0)
+            fw.write("%d" % count)
 
         # 写入entity2id
         print("Saving entities")
         with open(entity2id_file, "w", encoding="utf-8") as f:
+            f.write("%d\n" % len(self.entity2id))
             for ent_id, index in self.entity2id.items():
                 f.write("%s\t%d\n" % (ent_id, index))
 
         # 写入relation2id
         print("Saving relations")
         with open(relation2id_file, "w", encoding="utf-8") as f:
+            f.write("%d\n" % len(self.relation2id))
             for rel_id, index in self.relation2id.items():
                 f.write("%s\t%d\n" % (rel_id, index))
 

@@ -173,7 +173,7 @@ class DataPreprocessor(object):
 if __name__ == '__main__':
     root_path = "F:/Code projects/Python/Recommendation/DKN/"
     input_files = ["raw_data/raw_train.txt", "raw_data/raw_test.txt"]
-    output_files = ["raw_data/train.txt", "raw_data/test.txt"]
+    output_files = ["train.txt", "test.txt"]
     preprocessor = DataPreprocessor(input_files=input_files, root_path=root_path,
                                     min_word_count=2, min_entity_count=1, word_embedding_dim=50)
 

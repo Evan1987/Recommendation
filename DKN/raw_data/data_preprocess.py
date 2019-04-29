@@ -14,9 +14,22 @@ MAX_TITLE_LENGTH = 10
 PATTERN1 = re.compile('[^A-Za-z]')  # 非字母
 PATTERN2 = re.compile('[ ]{2,}')  # >=两个空格
 
+
 class DataPreprocessor(object):
-    def __init__(self, input_files: str, min_word_count: int=2, min_entity_count: int=1, word_embedding_dim: int=50):
-        self.input_files = input_files
+
+    def __init__(self, *, input_files: List[str], root_path: Optional[str]=None,
+                 min_word_count: int=2, min_entity_count: int=1, word_embedding_dim: int=50):
+        """
+        原始数据处理类
+        :param input_files: 输入文件名
+        :param root_path: 缺省路径的目录地址
+        :param min_word_count: 筛除低频词的阈值
+        :param min_entity_count: 筛出低频实体的阈值
+        :param word_embedding_dim: word2vec的embedding维数
+        """
+        self.root_path = root_path if root_path else os.getcwd()
+        self.input_files = [os.path.join(self.root_path, file) if not os.path.isfile(file) else file
+                            for file in input_files]
         self.word2freq = defaultdict(int)  # word: count
         self.entity2freq = defaultdict(int)  # entity_id: count
         self.word2index = {}  # word: word_index(int)
@@ -71,12 +84,13 @@ class DataPreprocessor(object):
             print("Succeed in Parsing Input Files!")
             print("Words num: %d.\tEntity num: %d" % (len(self.word2index), len(self.entity2index)))
 
-    def encoding_title(self, title: str, entities: str) -> (str, str):
+    def _encoding_title(self, title: str, entities: str) -> (str, str):
         """
         根据当前的 entities，寻找 title与entities的单词关联，并返回 title的 word_encoding序列和 entity_encoding序列
         :param title: 标题
         :param entities: 当前标题对应的 entities信息, id_1:entity_1;id_2:entity_2...
-        :return: word_encoding, entity_encoding
+        :return: word_encoding(w1's word_index, w2's word_index,..., wN's word_index),
+                 entity_encoding(w1's entity_index, w2's entity_index,..., wN's entity_index)
         """
         # 对该entity进行拆分，每个单词获得该entity的index_id
         local_mapping = {}  # ent_w1: ent_index_id, ent_w2: ent_index_id
@@ -103,9 +117,12 @@ class DataPreprocessor(object):
 
         return ",".join(word_encoding), ",".join(entity_encoding)
 
-    def transform(self, input_file, output_file):
+    def transform(self, input_file: str, output_file: str):
         """
         对 input_file的标题进行 index处理，生成 word_index_encoding 和 entity_index_encoding
+        并输出至output_file
+        :param input_file: 输入数据地址
+        :param output_file: 输出数据地址
         """
         with timer("Transform", True):
             print("**** Starting Transform %s ****" % input_file)
@@ -114,36 +131,56 @@ class DataPreprocessor(object):
                     line = line.strip()
                     if line:
                         user, title, label, entities = line.split("\t")
-                        word_encoding, entity_encoding = self.encoding_title(title, entities)  # 从entity中获取特征
+                        word_encoding, entity_encoding = self._encoding_title(title, entities)  # 从entity中获取特征
                         content = "\t".join([user, word_encoding, entity_encoding, label])
                         fw.write(content + "\n")
             print("Transformation Done!")
 
-    def save_info(self, root_path: Optional[str]=None):
-        """
-        将 entity2index，word_embedding写入硬盘
-        :param root_path: 根目录
-        """
-        if not root_path:
-            root_path = os.getcwd()
+    def get_w2v_model(self):
+        """generate or load word2vec model"""
+        w2v_file = "word_embeddings_" + str(self.K) + ".model"
+        output_path = os.path.join(self.root_path, w2v_file)
+        if os.path.exists(output_path):
+            print("**** Model already exists. Loading model now ... ****")
+            self.w2v_model = gensim.models.word2vec.Word2Vec.load(output_path)
+        else:
+            print("**** Training word2vec model now ****")
+            self.w2v_model = gensim.models.word2vec.Word2Vec(sentences=self.corpus, size=self.K, min_count=1, workers=8)
+            print("**** Succeed in training. Saving model... ****")
+            self.w2v_model.save(output_path)
 
+    def save_info(self):
+        """
+        将 entity2index，word_embedding向量写入硬盘
+        """
         # 写入 entity2index
-        with open(os.path.join(root_path, "kg/entity2index.txt"), "w", encoding="utf-8") as f:
+        print("**** Saving entity2index map ****")
+        with open(os.path.join(self.root_path, "kg/entity2index.txt"), "w", encoding="utf-8") as f:
             for ent_id, ent_index in self.entity2index.items():
                 f.write("%d\t%d\n" % (ent_id, ent_index))
 
-        # 写入wordembedding
+        # 写入wordembedding 以numpy文件写入，行标对应word2index的index
+        print("**** Saving word2vec embeddings ****")
+        file = "word_embeddings_" + str(self.K) + ".vec"
+        embeddings = np.zeros(shape=[len(self.word2index) + 1, self.K])  # 第一行留给标号0的word(dummy word)
+        for word, index in self.word2index.items():
+            if word in self.w2v_model.wv.vocab:
+                vec = self.w2v_model[word]
+                embeddings[index] = vec
+        np.save(os.path.join(self.root_path, file), embeddings)
 
 
+if __name__ == '__main__':
+    root_path = "F:/Code projects/Python/Recommendation/DKN/"
+    input_files = ["raw_data/raw_train.txt", "raw_data/raw_test.txt"]
+    output_files = ["raw_data/train.txt", "raw_data/test.txt"]
+    preprocessor = DataPreprocessor(input_files=input_files, root_path=root_path,
+                                    min_word_count=2, min_entity_count=1, word_embedding_dim=50)
 
+    preprocessor.file_parsing()
+    for input_file, output_file in zip(input_files, output_files):
+        input_file, output_file = [os.path.join(root_path, file) for file in [input_file, output_file]]
+        preprocessor.transform(input_file, output_file)
 
-
-
-
-
-
-
-
-
-
-
+    preprocessor.get_w2v_model()
+    preprocessor.save_info()

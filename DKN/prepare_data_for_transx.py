@@ -74,8 +74,7 @@ class KG4Trans(object):
 if __name__ == '__main__':
     kg_path = os.path.join(PATH, "kg")
     kg_file = os.path.join(kg_path, "kg.txt")
-    output_path = os.path.join(kg_path, "kg_extract")
-    preprocessor = KG4Trans(kg_file=kg_file, output_path=output_path)
+    preprocessor = KG4Trans(kg_file=kg_file, output_path=kg_path)
     preprocessor.extract()
 
 

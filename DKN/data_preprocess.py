@@ -89,7 +89,7 @@ class DataPreprocessor(object):
     def _encoding_title(self, title: str, entities: str) -> (str, str):
         """
         根据当前的 entities，寻找 title与entities的单词关联，并返回 title的 word_encoding序列和 entity_encoding序列
-        :param title: 标题
+        :param title: 标题 (w1, w2, ..., wN)
         :param entities: 当前标题对应的 entities信息, id_1:entity_1;id_2:entity_2...
         :return: word_encoding(w1's word_index, w2's word_index,..., wN's word_index),
                  entity_encoding(w1's entity_index, w2's entity_index,..., wN's entity_index)
@@ -140,6 +140,7 @@ class DataPreprocessor(object):
 
     def get_w2v_model(self):
         """generate or load word2vec model"""
+
         w2v_file = "word_embeddings_" + str(self.K) + ".model"
         output_path = os.path.join(self.output_path, w2v_file)
         if os.path.exists(output_path):

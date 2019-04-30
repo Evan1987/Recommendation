@@ -39,7 +39,7 @@ class KG4Trans(object):
 
     def read(self):
         ent_cnt, rel_cnt = 0, 0
-        count = 0
+        content = []
         with open(self.kg_file, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -48,33 +48,21 @@ class KG4Trans(object):
                     head_index, ent_cnt = self._add_to_collection(head, self.entity2id, ent_cnt)
                     tail_index, ent_cnt = self._add_to_collection(tail, self.entity2id, ent_cnt)
                     rel_index, rel_cnt = self._add_to_collection(rel, self.relation2id, rel_cnt)
-                    count += 1
-                    yield (head_index, tail_index, rel_index)
-
+                    content.append((head_index, tail_index, rel_index))
+        return content
 
     def extract(self):
-        ent_cnt, rel_cnt = 0, 0
-        triplet2id_file = os.path.join(self.output_path, "triplet2id.txt")
+        triplet2id_file = os.path.join(self.output_path, "triple2id.txt")
         entity2id_file = os.path.join(self.output_path, "entity2id.txt")
         relation2id_file = os.path.join(self.output_path, "relation2id.txt")
 
+        content = self.read()
         # encoding triplet and collect entity & relation to dict
         print("Saving encoded triplets")
-        with open(self.kg_file, "r", encoding="utf-8") as fr, \
-                open(triplet2id_file, "w", encoding="utf-8") as fw:
-
-
-            for line in fr:
-                line = line.strip()
-                if line:
-                    head, rel, tail = line.split("\t")
-                    head_index, ent_cnt = self._add_to_collection(head, self.entity2id, ent_cnt)
-                    tail_index, ent_cnt = self._add_to_collection(tail, self.entity2id, ent_cnt)
-                    rel_index, rel_cnt = self._add_to_collection(rel, self.relation2id, rel_cnt)
-                    fw.write("%d\t%d\t%d\n" % (head_index, tail_index, rel_index))
-                    count += 1
-            fw.seek(0, 0)
-            fw.write("%d" % count)
+        with open(triplet2id_file, "w", encoding="utf-8") as f:
+            f.write("%d\n" % len(content))  # 写入triplet数量至首行
+            for head_index, tail_index, rel_index in content:
+                f.write("%d\t%d\t%d\n" % (head_index, tail_index, rel_index))
 
         # 写入entity2id
         print("Saving entities")

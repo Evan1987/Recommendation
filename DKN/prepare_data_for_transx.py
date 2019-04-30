@@ -9,9 +9,9 @@ from DKN.constant import PATH
 class KG4Trans(object):
     def __init__(self, *, kg_file: str, output_path: Optional[str]=None):
         """
-        读取原始kg数据，输出
+        读取原始 kg数据，输出可调用 Fast-TransX API的输入数据
         :param kg_file: 数据路径，记录 triplets三元组 head[TAB]relation[TAB]tail
-        :param output_path:
+        :param output_path: 数据输出路径
         """
         self.output_path = output_path if output_path else os.getcwd()
         if not os.path.exists(self.output_path):
@@ -52,9 +52,9 @@ class KG4Trans(object):
         return content
 
     def extract(self):
-        triplet2id_file = os.path.join(self.output_path, "triple2id.txt")
-        entity2id_file = os.path.join(self.output_path, "entity2id.txt")
-        relation2id_file = os.path.join(self.output_path, "relation2id.txt")
+        triplet2id_file = os.path.join(self.output_path, "triple2id.txt")  # encoded by index for each row
+        entity2id_file = os.path.join(self.output_path, "entity2id.txt")  # entity_id: entity_index(kg)
+        relation2id_file = os.path.join(self.output_path, "relation2id.txt")  # relation_id: relation_index(kg)
 
         content = self.read()
         # encoding triplet and collect entity & relation to dict

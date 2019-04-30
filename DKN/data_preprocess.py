@@ -157,7 +157,7 @@ class DataPreprocessor(object):
         """
         # 写入 entity2index
         print("**** Saving entity2index map ****")
-        with open(os.path.join(self.output_path, "entity2index.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(PATH, "kg/entity2index.txt"), "w", encoding="utf-8") as f:
             for ent_id, ent_index in self.entity2index.items():
                 f.write("%d\t%d\n" % (ent_id, ent_index))
 

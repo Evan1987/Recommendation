@@ -20,6 +20,8 @@ def pearson(x: Dict[Any, int], y: Dict[Any, int]) -> float:
         return 0.
 
     denominator = ((sum_x2 - sum_x ** 2 / n) * (sum_y2 - sum_y ** 2 / n)) ** 0.5
+    if denominator == 0:
+        return 0
     return (sum_xy - (sum_x * sum_y) / n) / denominator
 
 

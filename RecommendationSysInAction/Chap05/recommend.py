@@ -1,4 +1,4 @@
-"""Content-based recommendation"""
+"""Content-based recommendation, Compare the sim between item's profile and user's profile."""
 
 import os
 import json
@@ -43,6 +43,7 @@ class ContentBasedRec(object):
 
     @staticmethod
     def get_non_rating_items(rating: pd.DataFrame, total: Set[int]) -> Dict[int, Set[int]]:
+        """Get not rated items for each user."""
         rated_summary = rating.groupby("UserID").agg({"MovieID": lambda s: set(s)})
         rated_summary = dict(rated_summary["MovieID"])
         return {user: total.difference(rated) for user, rated in rated_summary.items()}

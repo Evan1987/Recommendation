@@ -5,7 +5,7 @@ import json
 import pandas as pd
 import logging
 from scipy.spatial.distance import cosine
-from _utils.collections import PriorityQueue
+from _utils.ucollections import PriorityQueue
 from _utils.context import timer
 from typing import Dict, List, Set
 

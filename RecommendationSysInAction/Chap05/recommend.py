@@ -1,4 +1,4 @@
-"""Content-based recommendation, Compare the sim between item's profile and user's profile."""
+""" 5.3 Content-based recommendation, Compare the sim between item's profile and user's profile."""
 
 import os
 import json

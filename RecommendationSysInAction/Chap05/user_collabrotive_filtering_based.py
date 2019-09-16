@@ -1,50 +1,9 @@
-""" Construct a simple User-based CF Recommendation"""
-import time
-import random
+""" 5.4.1 Construct a simple User-based CF Recommendation"""
+
 import math
+from RecommendationSysInAction.Chap05.utils import Data, generate_score_data, profiler
 from _utils.context import timer
 from typing import Dict, Set, List, Callable
-
-
-Data = {
-    "A": {"a": 3.0, "b": 4.0, "c": 0.0, "d": 3.5, "e": 0.0},
-    "B": {"a": 4.0, "b": 0.0, "c": 4.5, "d": 0.0, "e": 3.5},
-    "C": {"a": 0.0, "b": 3.5, "c": 0.0, "d": 0.0, "e": 3.0},
-    "D": {"a": 0.0, "b": 4.0, "c": 0.0, "d": 3.5, "e": 3.0},
-}
-
-
-def generate_score_data(n_users: int, n_items: int, sparse_ratio: float, seed: int = 0) -> Dict[str, Dict[str, float]]:
-    """Generate a random user-item score data. The score is between [0, 5] and integer times of 0.5.
-    :param n_users: Num of users.
-    :param n_items: Num of items.
-    :param sparse_ratio: The ratio of zero in score matrix, between [0, 1]. `0` means there is no zero scored item.
-        `1` means the score data is empty.
-    :param seed: The random seed.
-    :raises: ValueError: When sparse_ratio not between [0, 1].
-    :return: A score data like `Data` above.
-    """
-    if not 0 <= sparse_ratio <= 1:
-        raise ValueError(f"The sparse_ratio expects to be between [0, 1], got `{sparse_ratio}`.")
-
-    rng = random.Random(seed)
-    return {chr(65 + x): {chr(97 + k): rng.randint(0, 10) * 0.5 if rng.random() > sparse_ratio else 0
-                          for k in range(n_items)}
-            for x in range(n_users)}
-
-
-def profiler(name: str, repeats: int):
-    def wrapper(func: Callable):
-        def inner_wrapper(*args, **kwargs):
-            res = None
-            tic = time.time()
-            for _ in range(repeats):
-                res = func(*args, **kwargs)
-            toc = time.time()
-            print(f"{name} cost: {(toc - tic) / repeats} sec")
-            return res
-        return inner_wrapper
-    return wrapper
 
 
 class UserCF(object):
@@ -59,7 +18,7 @@ class UserCF(object):
         # Delete zero-scored items
         self.user_scores = user_scores
         self.user_non_score_items: Dict[str, List[str]] = self.get_user_non_score_items(user_scores)
-        self.users_sim = self.cal_user_similarity_better()  # self.cal_user_similarity()
+        self.users_sim = self.cal_user_similarity()
 
     @staticmethod
     def get_user_non_score_items(user_scores: Dict[str, Dict[str, float]]) -> Dict[str, List[str]]:
@@ -69,6 +28,7 @@ class UserCF(object):
 
     @staticmethod
     def _cal_user_similarity(a: Set[str], b: Set[str]) -> float:
+        """Cosine similarity between two set, each element indicates a dimension"""
         return len(a & b) / ((len(a) * len(b)) ** 0.5)
 
     @profiler("user similarity", 1)
@@ -173,8 +133,7 @@ class UserCF(object):
         """
         Calculate the recommend score between specified user and item.
         For example, the score computation between user `C` and item `a` is as follows:
-        W{Ca} = Sim{CA} * Score{Aa} + Sim{CB} * Score{Ba} + Sim{CD} * Score{Da}
-              = Sim{CA} * 3 + Sim{CB} * 4 + Sim{CD} * 0
+        Score(C, a) = sum([Score(U, a) * Sim(U, C) for U in Users-besides-C])
         """
         score = 0.0
         user_sim = self.users_sim[user]
@@ -188,12 +147,10 @@ class UserCF(object):
 
 
 if __name__ == '__main__':
-    Data = generate_score_data(100, 10000, 0.2, 0)
+    Data = generate_score_data(100, 1000, 0.2, 0)
 
-    # user similarity cost: 5.747124481201172 sec
-    # recommend cost: 0.1108 sec
-
-    # user similarity better cost: 14.92 sec
+    # user similarity cost: 0.536 sec
+    # recommend cost: 0.015 sec
     ub = UserCF(Data)
     with timer(name="User-based CF"):
         print(ub.recommend("C"))

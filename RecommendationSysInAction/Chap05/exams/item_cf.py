@@ -1,8 +1,7 @@
-"""A User-based CF Recommendation on MovieLens data"""
+"""A Item-based CF Recommendation on MovieLens data"""
 
 import os
 import random
-import math
 import json
 import logging
 import pandas as pd
@@ -18,14 +17,14 @@ LOGGER = logging.getLogger("logger")
 MOVIE_LENS_SRC = r"F:\for learn\Python\推荐系统开发实战\章节代码\data\ml-1m"
 
 
-class UserCFRecommend(object):
+class ItemCFRecommend(object):
     tmp_path = os.path.join(os.path.dirname(__file__), "tmp")
-    similarity_file = os.path.join(tmp_path, "user_similarity.json")
+    similarity_file = os.path.join(tmp_path, "item_similarity.json")
 
     def __init__(self, rating_data: pd.DataFrame):
         self.train_data, self.test_data = self.split(rating_data, seed=0, test_size=0.1)
         self.item_users, self.user_rated_summary, self.train_data = self.generate_data(self.train_data)
-        self.user_sims: Dict[str, Dict[str, float]] = self.cal_user_similarity()  # User rated items summary
+        self.item_sims: Dict[str, Dict[str, float]] = self.cal_item_similarity()  # User rated items summary
 
     @classmethod
     def from_file(cls, data_file: str):
@@ -48,37 +47,37 @@ class UserCFRecommend(object):
         return data[is_train], data[~is_train]
 
     @staticmethod
-    def generate_data(data: pd.DataFrame) -> Tuple[Dict[str, int], Dict[str, Set[str]], Dict[str, Dict[str, int]]]:
+    def generate_data(data: pd.DataFrame) -> Tuple[Dict[str, Set[str]], Dict[str, Set[str]], Dict[str, Dict[str, int]]]:
         """Generate different type of data from given original rating data.
-        :returns: 1) The total count of rated users for each item.
+        :returns: 1) The total rated user for each item.
                   2) The total set of items for each user.
                   3) The dict-transformed data from original DataFrame.
         """
         LOGGER.info("Extract data information...")
         # Summary of item, the num of users who rated on it.
-        item_users: Dict[str, int] = dict(data["item"].value_counts())
+        item_users: Dict[str, Set[str]] = data.groupby("item").agg({"user": lambda s: set(list(s))})["user"].to_dict()
 
         # Summary of all rated item set for each user
-        user_rated_summary: pd.DataFrame = data.groupby("user").agg({"item": lambda s: set(list(s))})
-        user_rated_summary: Dict[str, Set[str]] = user_rated_summary["item"].to_dict()
+        user_rated_summary: Dict[str, Set[str]] = data.groupby("user")\
+            .agg({"item": lambda s: set(list(s))})["item"].to_dict()
 
         # Transform data from pd.DataFrame to Dict of Dict
         def generate_record(d: pd.DataFrame):
             d["record"] = d.apply(lambda row: dict(zip(row["item"], row["score"])), axis=1)
             return d[["record"]]
+
         manifest_data = data.groupby("user").agg({"item": tuple, "score": tuple}).pipe(generate_record)
         manifest_data = manifest_data["record"].to_dict()
         return item_users, user_rated_summary, manifest_data
 
-    def _cal_user_similarity(self, a: Set[str], b: Set[str]) -> float:
+    @staticmethod
+    def _cal_item_similarity(a: Set[str], b: Set[str]) -> float:
         """Cosine similarity between two set, each element indicates a dimension"""
-        intersection = a & b
-        x = sum([1 / math.log(self.item_users[item] + 1) for item in intersection])  # adding hot punishment
-        return x / ((len(a) * len(b)) ** 0.5)
+        return len(a & b) / ((len(a) * len(b)) ** 0.5)
 
-    # 6040 users
-    # To cal similarity will cost 5 - 6 minutes, and 1GB disk space.
-    def cal_user_similarity(self) -> Dict[str, Dict[str, float]]:
+    # 3698 items
+    # To cal similarity will cost 1 minute, and 330MB disk space.
+    def cal_item_similarity(self) -> Dict[str, Dict[str, float]]:
         if os.path.exists(self.similarity_file):
             LOGGER.info("Loading similarity from disk...")
             with open(self.similarity_file, "r") as f:
@@ -87,13 +86,13 @@ class UserCFRecommend(object):
 
         LOGGER.info("Generate new similarity files...")
         similarity: Dict[str, Dict[str, float]] = defaultdict(dict)
-        features = list(self.user_rated_summary.items())
+        features = list(self.item_users.items())
         n = len(features)
         for i in tqdm(range(n)):
             u, u_sets = features[i]
             for j in range(i + 1, n):
                 v, v_sets = features[j]
-                similarity[u][v] = similarity[v][u] = self._cal_user_similarity(u_sets, v_sets)
+                similarity[u][v] = similarity[v][u] = self._cal_item_similarity(u_sets, v_sets)
 
         os.makedirs(self.tmp_path, exist_ok=True)
         with open(self.similarity_file, "w") as f:
@@ -101,17 +100,20 @@ class UserCFRecommend(object):
         return similarity
 
     def recommend(self, user: str, k: int = 8, n_items: int = 40):
-        """Recommend for target user, only consider Top`k` neighbour users and output `n_items` items."""
-        neighbours = sorted(self.user_sims[user].items(), key=lambda pair: pair[1], reverse=True)[:k]
-        rated_items = self.user_rated_summary[user]
+        """
+        Recommend for target user, only consider Top`k` neighbour items for each rated item and output `n_items` items.
+        """
+
+        entries = self.train_data[user]
         recall_items = {}
 
-        for user_, sim in neighbours:
-            for item, score in self.train_data[user_].items():
-                if item in rated_items:
+        for rated_item, score in entries.items():
+            neighbours = sorted(self.item_sims[rated_item].items(), key=lambda pair: pair[1], reverse=True)[:k]
+            for item_, sim in neighbours:
+                if item_ in entries:
                     continue
-                recall_items.setdefault(item, 0)
-                recall_items[item] += score * sim
+                recall_items.setdefault(item_, 0)
+                recall_items[item_] += score * sim
 
         r = PriorityQueue(maxsize=n_items)
         for item, score in recall_items.items():
@@ -121,7 +123,7 @@ class UserCFRecommend(object):
 
     def evaluation(self, k: int = 8, n_items: int = 10) -> Tuple[float, float]:
         """Compute precision and recall"""
-        test_user_rated_items: Dict[str, Set[str]] =\
+        test_user_rated_items: Dict[str, Set[str]] = \
             self.test_data.groupby("user").agg({"item": lambda s: set(list(s))})["item"].to_dict()
 
         hit = 0
@@ -141,10 +143,10 @@ class UserCFRecommend(object):
 
 
 if __name__ == '__main__':
-    rec = UserCFRecommend.from_file(os.path.join(MOVIE_LENS_SRC, "ratings.dat"))
-    with timer("Recommend"):  # 0.006s
+    rec = ItemCFRecommend.from_file(os.path.join(MOVIE_LENS_SRC, "ratings.dat"))
+    with timer("Recommend"):  # 0.1356s
         result = rec.recommend("1", k=8, n_items=40)
     print(result)
 
     precision, recall = rec.evaluation(k=8, n_items=10)
-    print(f"Precision: {precision}, Recall: {recall}.")  # Precision: 0.17529, Recall: 0.10440.
+    print(f"Precision: {precision}, Recall: {recall}.")  # Precision: 0.188542, Recall: 0.11229.

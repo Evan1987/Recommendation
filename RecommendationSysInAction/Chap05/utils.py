@@ -1,5 +1,5 @@
 
-import time
+
 import random
 from typing import Dict, Callable
 
@@ -29,17 +29,3 @@ def generate_score_data(n_users: int, n_items: int, sparse_ratio: float, seed: i
     return {chr(65 + x): {chr(97 + k): rng.randint(0, 10) * 0.5 if rng.random() > sparse_ratio else 0
                           for k in range(n_items)}
             for x in range(n_users)}
-
-
-def profiler(name: str, repeats: int):
-    def wrapper(func: Callable):
-        def inner_wrapper(*args, **kwargs):
-            res = None
-            tic = time.time()
-            for _ in range(repeats):
-                res = func(*args, **kwargs)
-            toc = time.time()
-            print(f"{name} cost: {(toc - tic) / repeats} sec")
-            return res
-        return inner_wrapper
-    return wrapper

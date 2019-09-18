@@ -1,9 +1,10 @@
 """ 5.4.1 Construct a simple User-based CF Recommendation"""
 
 import math
-from RecommendationSysInAction.Chap05.utils import Data, generate_score_data, profiler
+from RecommendationSysInAction.utils.decorator import profiler
+from RecommendationSysInAction.Chap05.utils import generate_score_data
 from _utils.context import timer
-from typing import Dict, Set, List, Callable
+from typing import Dict, Set, List
 
 
 class UserCF(object):

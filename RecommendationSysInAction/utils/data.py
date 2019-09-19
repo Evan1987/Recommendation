@@ -68,4 +68,5 @@ class HotelMess:
 
     @classmethod
     def load_data(cls):
-        return pd.read_csv(os.path.join(_PATH, "hotel-mess/hotel-mess.csv"), engine="python", encoding="GBK")
+        file_path = os.path.join(_PATH, "hotel-mess/hotel-mess.csv")
+        return pd.read_csv(file_path, engine="python", encoding="GBK")

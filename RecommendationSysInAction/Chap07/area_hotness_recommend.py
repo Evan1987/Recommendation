@@ -15,6 +15,7 @@ class AreaRecallStrategy(RecallStrategy):
     def __init__(self):
         self.area = None
 
+    @property
     def required_features(self):
         return ["location"]
 
@@ -32,6 +33,7 @@ class CombineScoreStrategy(ScoreStrategy):
                 raise ValueError(f"feature `{feature_name}` not defined.")
         self.weights = weights
 
+    @property
     def required_features(self) -> List[str]:
         return list(self.weights.keys())
 
@@ -44,9 +46,11 @@ class CombineSortStrategy(SortStrategy):
     def __init__(self, scorer: ScoreStrategy):
         self._scorer = scorer
 
+    @property
     def required_features(self) -> List[str]:
-        return self._scorer.required_features()
+        return self._scorer.required_features
 
+    @property
     def score_strategy(self) -> ScoreStrategy:
         return self._scorer
 
@@ -68,11 +72,11 @@ class AreaHotnessRecommend(object):
 
     def recommend(self, ctx: Context):
         # recall stage
-        assembly_features(self.items, self.recall_strategy.required_features(), ctx)
+        assembly_features(self.items, self.recall_strategy.required_features, ctx)
         self.items = [item for item in self.items if self.recall_strategy.recall(item)]
 
         # sort stage
-        assembly_features(self.items, self.sort_strategy.required_features(), ctx)
+        assembly_features(self.items, self.sort_strategy.required_features, ctx)
         items = self.sort_strategy.sort(self.items)
         return [(item.poi, score) for item, score in items]
 

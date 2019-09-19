@@ -62,3 +62,10 @@ class LastFM(object):
         return load_data(os.path.join(cls._dir, "user_taggedartists.dat"), sep=cls._sep, dtype=int)
 
 
+class HotelMess:
+
+    n_pois = 650
+
+    @classmethod
+    def load_data(cls):
+        return pd.read_csv(os.path.join(_PATH, "hotel-mess/hotel-mess.csv"), encoding="GBK")

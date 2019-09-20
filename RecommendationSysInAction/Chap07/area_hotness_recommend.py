@@ -65,12 +65,13 @@ def assembly_features(items: List[Item], required_features: List[str], ctx: Cont
 class AreaHotnessRecommend(object):
     _base_recall_items = base_recall_items()
 
-    def __init__(self, recall_strategy: RecallStrategy, sort_strategy: SortStrategy):
+    def __init__(self, recall_strategy: AreaRecallStrategy, sort_strategy: CombineSortStrategy):
         self.recall_strategy = recall_strategy
         self.sort_strategy = sort_strategy
         self.items = self._base_recall_items
 
     def recommend(self, ctx: Context):
+        self.recall_strategy.set_area(ctx.location)
         # recall stage
         assembly_features(self.items, self.recall_strategy.required_features, ctx)
         self.items = [item for item in self.items if self.recall_strategy.recall(item)]

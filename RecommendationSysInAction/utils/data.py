@@ -63,10 +63,17 @@ class LastFM(object):
 
 
 class HotelMess:
-
+    file_path = os.path.join(_PATH, "hotel-mess/hotel-mess.csv")
     n_pois = 650
 
     @classmethod
     def load_data(cls):
-        file_path = os.path.join(_PATH, "hotel-mess/hotel-mess.csv")
-        return pd.read_csv(file_path, engine="python", encoding="GBK")
+        return pd.read_csv(cls.file_path, engine="python", encoding="GBK")
+
+
+class TelecomChurn:
+    file_path = os.path.join(_PATH, "telecom-churn/telecom-churn-prediction-data.csv")
+
+    @classmethod
+    def load_data(cls):
+        return pd.read_csv(cls.file_path, engine="python")

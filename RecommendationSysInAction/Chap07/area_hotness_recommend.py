@@ -38,6 +38,7 @@ class CombineScoreStrategy(ScoreStrategy):
         return list(self.weights.keys())
 
     def score(self, item: Item) -> float:
+        # todo: not implement the min-max processor in the feature definition
         return sum([item[feature_name] * weight for feature_name, weight in self.weights.items()])
 
 

@@ -18,7 +18,7 @@ class Cate(models.Model):  # The table for categories of news.
 
 
 class News(models.Model):  # The table for original news
-    news_id = models.BigIntegerField(verbose_name="ID", unique=True, blank=False)
+    news_id = models.BigIntegerField(verbose_name="ID", unique=True, blank=False, db_index=True)
     cate = models.ForeignKey(Cate, related_name="cate_news", on_delete=models.CASCADE)
     dt = models.DateTimeField(verbose_name="发表时间", blank=False)
     view_num = models.IntegerField(verbose_name="浏览次数", blank=True, default=0)
@@ -38,7 +38,7 @@ class News(models.Model):  # The table for original news
 
 
 class NewsHotness(models.Model):  # The table for hotness of news.
-    news_id = models.BigIntegerField(verbose_name="ID", unique=True, blank=False)
+    news_id = models.BigIntegerField(verbose_name="ID", unique=True, blank=False, db_index=True)
     cate_id = models.ForeignKey(Cate, related_name="cate_news", on_delete=models.CASCADE)
     hotness = models.FloatField(verbose_name="热度", blank=False)
 
@@ -53,7 +53,7 @@ class NewsHotness(models.Model):  # The table for hotness of news.
 
 
 class NewsTag(models.Model):  # The table for news's tag
-    news_id = models.BigIntegerField(verbose_name="ID", unique=False, blank=False)
+    news_id = models.BigIntegerField(verbose_name="ID", unique=False, blank=False, db_index=True)
     tag = models.CharField(verbose_name="标签", max_length=64, unique=False, blank=False)
 
     def __str__(self):
@@ -82,7 +82,7 @@ class NewsClick(models.Model):  # The table for the click for news
 
 
 class NewsSim(models.Model):  # The table for the similarity between each two news
-    news_id_left = models.BigIntegerField(verbose_name="left_ID", unique=False, blank=False)
+    news_id_left = models.BigIntegerField(verbose_name="left_ID", unique=False, blank=False, db_index=True)
     news_id_right = models.BigIntegerField(verbose_name="right_ID", unique=False, blank=False)
     sim = models.FloatField(verbose_name="相似度", blank=True, default=0.)
 
@@ -90,3 +90,8 @@ class NewsSim(models.Model):  # The table for the similarity between each two ne
         return f"{self.news_id_left} v {self.news_id_right}: {self.sim}"
 
     objects = models.Manager()
+
+    class Meta:
+        db_table = "news_sim"
+        verbose_name_plural = "新闻相似度表"
+

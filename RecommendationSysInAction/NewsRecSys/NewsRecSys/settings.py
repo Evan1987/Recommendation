@@ -73,6 +73,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'NewsRecSys.wsgi.application'
 
+DB_NAME = SETTINGS["defaultdb"]
 
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
@@ -80,7 +81,7 @@ WSGI_APPLICATION = 'NewsRecSys.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': SETTINGS["defaultdb"],
+        'NAME': DB_NAME,
         'USER': SETTINGS["name"],
         'PASSWORD': SETTINGS["password"],
         'HOST': SETTINGS["host"],

@@ -1,8 +1,8 @@
 import time
 from django.http import JsonResponse
 from django.http import request as _request
-from .models import News, NewsClick
-from ..recommend import SimRecommend, MostSeenRecommend
+from RecommendationSysInAction.NewsRecSys.recommend import SimRecommend, MostSeenRecommend
+from RecommendationSysInAction.NewsRecSys.news.models import News, NewsClick, Cate
 
 
 sim_rec = SimRecommend(5)
@@ -51,8 +51,16 @@ def one(request: _request.HttpRequest):
     return JsonResponse(result)
 
 
+def cates(request: _request.HttpRequest):
+    if "username" not in request.session.keys():
+        return JsonResponse({"code": 0})
 
-
+    cates_list = Cate.objects.all()
+    result = {
+        "code": 2,
+        "data": [{"cate_id": cate_one.cate_id, "cate_name": cate_one.cate_name} for cate_one in cates_list]
+    }
+    return JsonResponse(result)
 
 
 

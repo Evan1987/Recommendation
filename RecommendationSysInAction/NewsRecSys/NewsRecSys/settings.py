@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 import os
 from _utils.conn import get_settings
 
+
 SETTINGS = get_settings("mysql", type_="local")
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -39,8 +40,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'index',
-    'news',
+    'RecommendationSysInAction.NewsRecSys.index',
+    'RecommendationSysInAction.NewsRecSys.news',
+    'django.contrib.sites',
 ]
 
 MIDDLEWARE = [
@@ -54,6 +56,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'NewsRecSys.urls'
+SITE_ID = 1
 
 TEMPLATES = [
     {

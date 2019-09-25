@@ -2,9 +2,9 @@
 from django.http import JsonResponse
 from django.http import request as _request
 from django.views.decorators.csrf import csrf_exempt
-from ..news.models import News, Cate
-from ..NewsRecSys.settings import ALLOW_USERS, ALLOW_TAGS
-from ..recommend import UserBasedNewsRecommend, HotNewsRecommend
+from RecommendationSysInAction.NewsRecSys.news.models import News, Cate
+from RecommendationSysInAction.NewsRecSys.NewsRecSys.settings import ALLOW_USERS, ALLOW_TAGS
+from RecommendationSysInAction.NewsRecSys.recommend import UserBasedNewsRecommend, HotNewsRecommend
 
 
 @csrf_exempt

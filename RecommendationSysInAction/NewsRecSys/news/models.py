@@ -19,7 +19,7 @@ class Cate(models.Model):  # The table for categories of news.
 
 class News(models.Model):  # The table for original news
     news_id = models.BigIntegerField(verbose_name="ID", unique=True, blank=False, db_index=True)
-    cate = models.ForeignKey(Cate, related_name="cate_news", on_delete=models.CASCADE)
+    cate = models.ForeignKey(Cate, related_name="cate_news", on_delete=models.CASCADE, db_column="cate_id")
     dt = models.DateTimeField(verbose_name="发表时间", blank=False)
     view_num = models.IntegerField(verbose_name="浏览次数", blank=True, default=0)
     comment_num = models.IntegerField(verbose_name="跟帖次数", blank=True, default=0)
@@ -39,7 +39,7 @@ class News(models.Model):  # The table for original news
 
 class NewsHotness(models.Model):  # The table for hotness of news.
     news_id = models.BigIntegerField(verbose_name="ID", unique=True, blank=False, db_index=True)
-    cate_id = models.ForeignKey(Cate, related_name="cate_news", on_delete=models.CASCADE)
+    cate = models.ForeignKey(Cate, related_name="cate_news_hotness", on_delete=models.CASCADE, db_column="cate_id")
     hotness = models.FloatField(verbose_name="热度", blank=False)
 
     def __str__(self):
@@ -68,7 +68,7 @@ class NewsTag(models.Model):  # The table for news's tag
 
 class NewsClick(models.Model):  # The table for the click for news
     news_id = models.BigIntegerField(verbose_name="ID", unique=False, blank=False)
-    user = models.CharField(verbose_name="user_name", unique=False, blank=False)
+    user = models.CharField(verbose_name="user_name", unique=False, blank=False, max_length=64)
     click_dt = models.DateTimeField(verbose_name="浏览时间", blank=False, unique=False)
 
     def __str__(self):

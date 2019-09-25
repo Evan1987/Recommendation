@@ -53,7 +53,7 @@ class MostSeenRecommend(BaseRecommend):
         result = []
         for recall_news in recall_newses:
             score = recall_news.sim
-            news = News.objects.get(news_id=recall_news.news_id)[0]
+            news = News.objects.get(news_id=recall_news.news_id)
             result.append(RecallEntry(news=news, score=score))
         return result
 
@@ -83,14 +83,12 @@ class HotNewsRecommend(BaseRecommend):
 
 
 class UserBasedNewsRecommend(BaseRecommend):
-    def __init__(self, k: int):
+    def __init__(self, k: int = 20):
         self.is_new = False
         self._k = k
 
     @property
     def k(self):
-        if self.is_new:
-            return 20
         return self._k
 
     def recommend(self, username: str) -> List[RecallEntry]:
@@ -99,9 +97,13 @@ class UserBasedNewsRecommend(BaseRecommend):
             hot_news_rec = HotNewsRecommend(20, 40)
             return hot_news_rec.recommend()
 
-        latest_news = NewsClick.objects.filter(user=username).order_by("-click_dt")[:self._k]
+        latest_news = NewsClick.objects.filter(user=username).order_by("-click_dt")[:self._k // 2]
 
+        # find sim news for each clicked news
+        per_rec_num = self._k // len(latest_news) + 1 if len(latest_news) < (self.k // 2) else 2
+        sim_rec = SimRecommend(k=per_rec_num)
 
-
-
-
+        res = []
+        for one in latest_news:
+            res.extend(sim_rec.recommend(one))
+        return res[: self._k]

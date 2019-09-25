@@ -73,7 +73,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'NewsRecSys.wsgi.application'
 
-DB_NAME = SETTINGS["defaultdb"]
+DB_NAME = "news_rec"
 
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases

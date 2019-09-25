@@ -8,7 +8,6 @@ import itertools
 import logging
 from tqdm import tqdm
 from jieba.analyse import extract_tags
-from RecommendationSysInAction.NewsRecSys.news import models
 from RecommendationSysInAction.NewsRecSys.NewsRecSys.settings import DB_NAME
 from _utils.conn import get_mysql_conn
 from _utils.nlp.tools import stopwords
@@ -20,15 +19,7 @@ LOGGER = logging.getLogger("logger")
 tqdm.pandas()
 _PATH = os.path.join(os.path.dirname(__file__), "data")
 COLUMNS = ["news_id", "cate_id", "dt", "view_num", "comment_num", "title", "content"]
-
-
-TABLE_MAPPING: Dict[str, str] = {
-    "News": models.News.Meta.db_table,
-    "Cate": models.Cate.Meta.db_table,
-    "NewsHotness": models.NewsHotness.Meta.db_table,
-    "NewsSim": models.NewsSim.Meta.db_table,
-    "NewsTag": models.NewsTag.Meta.db_table,
-}
+conn = get_mysql_conn("local", db=DB_NAME)
 
 
 class DataProcessing(object):
@@ -53,9 +44,9 @@ class DataProcessing(object):
         self.write_mapping = {
             "News": self.data,
             "Cate": pd.DataFrame(self.cate_mapping.items(), columns=["cate_id", "cate_name"]),
-            "NewsHotness": self.news_hotness,
-            "NewsSim": self.news_sim,
-            "NewsTag": self.flatten_keywords_data(self.news_keywords),
+            "News_Hotness": self.news_hotness,
+            "News_Sim": self.news_sim,
+            "News_Tag": self.flatten_keywords_data(self.news_keywords),
         }
 
     @staticmethod
@@ -113,7 +104,9 @@ class DataProcessing(object):
 
     @staticmethod
     def flatten_keywords_data(keywords_data: pd.DataFrame) -> pd.DataFrame:
-        data = keywords_data.explode("keywords")
+        data = keywords_data.copy()
+        data["keywords"] = data["keywords"].apply(list)
+        data = data.explode("keywords").rename(columns={"keywords": "tag"})
         return data
 
     @staticmethod
@@ -131,14 +124,14 @@ class DataProcessing(object):
     def generate_similarity(keywords_data: pd.DataFrame) -> pd.DataFrame:
         """Generate similarity between each pair of news based on jaccard index of tags"""
         LOGGER.info("Generating the similarity between each pair of news.")
-
-        keywords_data["keywords"] = keywords_data["keywords"].apply(set)
-        news_keywords = keywords_data.set_index("news_id")["keywords"].to_dict().items()
+        data = keywords_data.copy()
+        data["keywords"] = data["keywords"].apply(set)
+        news_keywords = data.set_index("news_id")["keywords"].to_dict().items()
 
         pair_data = []
         for (left_news, left_keywords), (right_news, right_keywords)\
                 in tqdm(itertools.combinations(news_keywords, 2),
-                        desc="Generate sims", total=len(keywords_data) * (len(keywords_data) - 1) / 2):
+                        desc="Generate sims", total=len(data) * (len(data) - 1) / 2):
             intersection = left_keywords & right_keywords
             if not intersection:
                 continue
@@ -149,26 +142,30 @@ class DataProcessing(object):
 
     @staticmethod
     def write_to_mysql(conn, data: pd.DataFrame, table: str):
-        data.to_sql(table, conn, if_exists="replace", index=False, chunksize=5000)
+        data.to_sql(table, conn, if_exists="append", index=False, chunksize=5000)
 
     @staticmethod
     def write_to_fs(data: pd.DataFrame, file: str):
         data.to_csv(file, sep="\t", index=False)
 
-    def write(self, save_fs: bool = True, save_mysql: bool = True):
-        conn = None
-        if save_mysql:
-            conn = get_mysql_conn("local", db=DB_NAME)
+    def write(self):
         for model_name, data in self.write_mapping.items():
-            if save_fs:
-                LOGGER.info(f"Saving `{model_name}` data to disk.")
-                self.write_to_fs(data, os.path.join(self.path, f"tomysql/{model_name}.txt"))
-            if save_mysql:
-                LOGGER.info(f"Saving `{model_name}` data to mysql.")
-                table = TABLE_MAPPING[model_name]
-                self.write_to_mysql(conn, data, table)
+            LOGGER.info(f"Saving `{model_name}` data to disk.")
+            self.write_to_fs(data, os.path.join(self.path, f"tomysql/{model_name}.txt"))
+
+        # First insert `Cate` because other table has foreign key with it.
+        model_name = "Cate"
+        data = self.write_mapping[model_name]
+        LOGGER.info(f"Saving `{model_name}` data to mysql.")
+        self.write_to_mysql(conn, data, table=model_name.lower())
+
+        for model_name, data in self.write_mapping.items():
+            if model_name == "Cate":
+                continue
+            LOGGER.info(f"Saving `{model_name}` data to mysql.")
+            self.write_to_mysql(conn, data, table=model_name.lower())
 
 
 if __name__ == '__main__':
     obj = DataProcessing(_PATH)
-    obj.write(save_fs=True, save_mysql=False)
+    obj.write()

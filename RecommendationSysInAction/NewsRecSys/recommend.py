@@ -2,7 +2,7 @@
 
 import abc
 from collections import namedtuple
-from .news.models import News, NewsSim, NewsHotness, NewsTag
+from .news.models import News, NewsSim, NewsHotness, NewsTag, NewsClick
 from typing import List
 
 
@@ -57,6 +57,49 @@ class MostSeenRecommend(BaseRecommend):
             result.append(RecallEntry(news=news, score=score))
         return result
 
+
+class HotNewsRecommend(BaseRecommend):
+    """Recommend based on hotness of news."""
+    def __init__(self, start: int, end: int):
+        """Recommend news based on hotness and given slice.
+        :param start: The start of slice.
+        :param end: The end of slice.
+        """
+        if end <= start:
+            raise ValueError("`end` should be greater than `start`.")
+        self.start = start
+        self.end = end
+
+    @property
+    def k(self):
+        return self.end - self.start
+
+    def recommend(self) -> List[RecallEntry]:
+        hot_newses = NewsHotness.objects.order_by("-hotness").values("news_id", "hotness")[self.start: self.end]
+        ids = [one.news_id for one in hot_newses]
+        scores = [one.hotness for one in hot_newses]
+        newses = News.objects.filter(news_id__in=ids)
+        return [RecallEntry(news=news, score=score) for news, score in zip(newses, scores)]
+
+
+class UserBasedNewsRecommend(BaseRecommend):
+    def __init__(self, k: int):
+        self.is_new = False
+        self._k = k
+
+    @property
+    def k(self):
+        if self.is_new:
+            return 20
+        return self._k
+
+    def recommend(self, username: str) -> List[RecallEntry]:
+        # If the user is new, recommend 20:40 of hot list
+        if not NewsClick.objects.filter(user=username).exists():
+            hot_news_rec = HotNewsRecommend(20, 40)
+            return hot_news_rec.recommend()
+
+        latest_news = NewsClick.objects.filter(user=username).order_by("-click_dt")[:self._k]
 
 
 

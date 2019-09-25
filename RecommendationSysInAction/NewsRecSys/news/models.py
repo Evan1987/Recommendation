@@ -68,7 +68,7 @@ class NewsTag(models.Model):  # The table for news's tag
 
 class NewsClick(models.Model):  # The table for the click for news
     news_id = models.BigIntegerField(verbose_name="ID", unique=False, blank=False)
-    user = models.BigIntegerField(verbose_name="user_id", unique=False, blank=False)
+    user = models.CharField(verbose_name="user_name", unique=False, blank=False)
     click_dt = models.DateTimeField(verbose_name="浏览时间", blank=False, unique=False)
 
     def __str__(self):

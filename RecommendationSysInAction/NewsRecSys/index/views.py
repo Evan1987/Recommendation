@@ -26,3 +26,6 @@ def home(request: _request.HttpRequest):
     # total pages
     total = 0
 
+    if _cate == "1":
+
+

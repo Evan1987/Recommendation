@@ -8,7 +8,8 @@ import os
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-
+from random import Random
+from tensorflow.keras.utils import Sequence
 from constant import PROJECT_HOME
 from typing import Tuple, Dict, Any
 
@@ -24,6 +25,19 @@ DATA_ALIAS = {
 }
 
 TEST_Y_TRUE = DATA_ALIAS["test"][LABEL].values
+MAX_USER = DATA_ALIAS["train"]["user"].max()
+MAX_ITEM = DATA_ALIAS["train"]["item"].max()
+N = MAX_USER + MAX_ITEM + 1
+
+
+class InputKeys:
+    USER = "user"
+    ITEM = "item"
+    LABEL = "label"
+
+
+# 944 & 1683
+FEATURE_MAX_NUM = {InputKeys.USER: MAX_USER + 1, InputKeys.ITEM: MAX_ITEM + 1}
 
 
 class FMDataTransformer(object):
@@ -98,3 +112,28 @@ class FFMDataTransformer(object):
         if self.n is None:
             return self.fit(data).transform(data)
         return self.transform(data)
+
+
+class TFDataSet(Sequence):
+    def __init__(self, data: pd.DataFrame, batch_size: int, seed: int = 0):
+        self.entries = data[FEATURES + [LABEL]].values
+        self.batch_size = batch_size
+        self._max_buckets = len(self.entries) // self.batch_size
+        self._indexes = np.arange(self._max_buckets)
+        self._rng = Random(seed)
+
+    def __len__(self):
+        return self._max_buckets
+
+    def __getitem__(self, index) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+        batch_index = self._indexes[index]
+        batch_data = self.entries[batch_index * self.batch_size: (batch_index + 1) * self.batch_size]
+        inputs = {
+            InputKeys.USER: batch_data[:, 0].astype(np.int32),
+            InputKeys.ITEM: batch_data[:, 1].astype(np.int32),
+        }
+        labels = batch_data[:, -1].astype(np.float32)
+        return inputs, labels
+
+    def on_epoch_end(self):
+        self._rng.shuffle(self._indexes)

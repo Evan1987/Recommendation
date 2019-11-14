@@ -6,21 +6,22 @@ from tensorflow.keras import layers, regularizers, Model
 from tensorflow.keras.utils import Sequence, plot_model
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import History
-from tensorflow.keras.optimizers import Adadelta
+from tensorflow.keras.optimizers import Adagrad, Adam
 from FM_FFM.data_utils import InputKeys, FEATURE_MAX_NUM
-from typing import Optional
+from typing import Optional, List
 
 
 class FM(object):
-    def __init__(self, k: int, learning_rate: float = 0.01, lambda_w: float = 1e-3, lambda_v: float = 1e-3):
+    def __init__(self, k: int, learning_rate: float = 0.2, lambda_w: float = 2e-4, lambda_v: float = 2e-4):
         self.K = k
         self.lr = learning_rate
         self.lw = lambda_w
         self.lv = lambda_v
-
         self.inputs = []
-        bias = K.variable([0.0], dtype="float32", name="bias")
-        linear_values = []
+
+        const_input = layers.Input(shape=(1,), dtype="float32", name=f"{InputKeys.BIAS}")
+        self.inputs.append(const_input)
+        linear_terms = []
         cross_terms = []
         for name, n_features in FEATURE_MAX_NUM.items():
             inputs = layers.Input(shape=(1,), dtype="int32", name=f"{name}")
@@ -32,25 +33,37 @@ class FM(object):
             weighted = self.embedded(n_features, 1, regularizers.l2(self.lw), inputs)
 
             self.inputs.append(inputs)
-            linear_values.append(weighted)
+            linear_terms.append(weighted)
             cross_terms.append(embedded)
 
-        cross_values = []
-        for f1, f2 in combinations(cross_terms, 2):
-            dotted = layers.dot([f1, f2], axes=1)
-            cross_values.append(dotted)
+        bias = layers.Dense(1, use_bias=False)(const_input)
+        cross_terms = self.cross_dot(cross_terms)
+        linear_values = layers.concatenate(linear_terms, axis=1)
+        cross_values = layers.concatenate(cross_terms, axis=1) if len(cross_terms) > 1 else cross_terms[0]
+        linear = layers.Lambda(self.mean)(linear_values)
+        cross = layers.Lambda(self.mean)(cross_values)
 
-        linear_values = layers.concatenate(linear_values, axis=1)
-        cross_values = layers.concatenate(cross_values, axis=1) if len(cross_values) > 1 else cross_values[0]
-        y = bias + K.sum(cross_values, axis=1, keepdims=True) + K.sum(linear_values, axis=1, keepdims=True)
+        y = layers.Add()([bias, linear, cross])
 
         self._predict_func = K.function(self.inputs, outputs=y, name="pred_function")
         self.model = Model(inputs=self.inputs, outputs=y)
         self.model.compile(
-            optimizer=Adadelta(learning_rate=self.lr),
+            optimizer=Adagrad(learning_rate=self.lr),  # Adadelta will fill
             loss="mean_squared_error",
             metrics=["mae"]
         )
+
+    @staticmethod
+    def cross_dot(tensors: List[tf.Tensor]):
+        cross_values = []
+        for f1, f2 in combinations(tensors, 2):
+            dotted = layers.dot([f1, f2], axes=1)
+            cross_values.append(dotted)
+        return cross_values
+
+    @staticmethod
+    def mean(tensors: List[tf.Tensor]):
+        return K.sum(tensors, axis=1, keepdims=True)
 
     @staticmethod
     def embedded(vocab_size: int, vec_length: int, embeddings_regularizer: regularizers.Regularizer,
@@ -65,18 +78,19 @@ class FM(object):
         h = self.model.fit_generator(
             generator=train_data,
             validation_data=test_data,
-            validation_steps=200,
             epochs=epochs,
             verbose=1,
-            steps_per_epoch=len(train_data),
-            use_multiprocessing=True,
+            use_multiprocessing=False,
             workers=4,
+            shuffle=False,
             callbacks=callbacks
         )
         return h
 
     def predict(self, users: np.ndarray, items: np.ndarray) -> np.ndarray:
-        return self._predict_func({InputKeys.USER: users, InputKeys.ITEM: items})
+        return self._predict_func({InputKeys.USER: users,
+                                   InputKeys.ITEM: items,
+                                   InputKeys.BIAS: np.ones(shape=[len(users), 1], dtype=np.float32)})
 
     def save_model(self, file: str):
         self.model.save(file, overwrite=True)

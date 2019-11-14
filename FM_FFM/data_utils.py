@@ -34,6 +34,7 @@ class InputKeys:
     USER = "user"
     ITEM = "item"
     LABEL = "label"
+    BIAS = "bias_const"
 
 
 # 944 & 1683
@@ -114,7 +115,7 @@ class FFMDataTransformer(object):
         return self.transform(data)
 
 
-class TFDataSet(Sequence):
+class TFFMDataSet(Sequence):
     def __init__(self, data: pd.DataFrame, batch_size: int, seed: int = 0):
         self.entries = data[FEATURES + [LABEL]].values
         self.batch_size = batch_size
@@ -128,9 +129,12 @@ class TFDataSet(Sequence):
     def __getitem__(self, index) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
         batch_index = self._indexes[index]
         batch_data = self.entries[batch_index * self.batch_size: (batch_index + 1) * self.batch_size]
+        users = batch_data[:, 0].astype(np.int32)
+        items = batch_data[:, 1].astype(np.int32)
         inputs = {
-            InputKeys.USER: batch_data[:, 0].astype(np.int32),
-            InputKeys.ITEM: batch_data[:, 1].astype(np.int32),
+            InputKeys.USER: users,
+            InputKeys.ITEM: items,
+            InputKeys.BIAS: np.ones(shape=[len(users), 1], dtype=np.float32),
         }
         labels = batch_data[:, -1].astype(np.float32)
         return inputs, labels

@@ -7,7 +7,7 @@ try:
 except ImportError as e:
     print("Importing error for `pearson`", e)
     from RecommendationSysInAction.Chap02.utils import pearson  # possibly be used for directly test
-from _utils.collections import PriorityQueue
+from _utils.ucollections import PriorityQueue
 from collections import defaultdict
 from typing import Dict, Any, List
 

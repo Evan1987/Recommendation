@@ -27,10 +27,10 @@ class FM(object):
             inputs = layers.Input(shape=(1,), dtype="int32", name=f"{name}")
 
             # cross terms
-            embedded = self.embedded(n_features, self.K, regularizers.l2(self.lv), inputs)
+            embedded = self.embedded(n_features + 1, self.K, regularizers.l2(self.lv), inputs)
 
             # linear terms
-            weighted = self.embedded(n_features, 1, regularizers.l2(self.lw), inputs)
+            weighted = self.embedded(n_features + 1, 1, regularizers.l2(self.lw), inputs)
 
             self.inputs.append(inputs)
             linear_terms.append(weighted)

@@ -38,7 +38,7 @@ class InputKeys:
 
 
 # 944 & 1683
-FEATURE_MAX_NUM = {InputKeys.USER: MAX_USER + 1, InputKeys.ITEM: MAX_ITEM + 1}
+FEATURE_MAX_NUM = {InputKeys.USER: MAX_USER, InputKeys.ITEM: MAX_ITEM}
 
 
 class FMDataTransformer(object):
@@ -119,16 +119,15 @@ class TFFMDataSet(Sequence):
     def __init__(self, data: pd.DataFrame, batch_size: int, seed: int = 0):
         self.entries = data[FEATURES + [LABEL]].values
         self.batch_size = batch_size
-        self._max_buckets = len(self.entries) // self.batch_size
-        self._indexes = np.arange(self._max_buckets)
+        self._indexes = np.arange(len(self.entries))
         self._rng = Random(seed)
 
     def __len__(self):
-        return self._max_buckets
+        return len(self.entries) // self.batch_size
 
     def __getitem__(self, index) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
-        batch_index = self._indexes[index]
-        batch_data = self.entries[batch_index * self.batch_size: (batch_index + 1) * self.batch_size]
+        indexes = self._indexes[index * self.batch_size: (index + 1) * self.batch_size]
+        batch_data = self.entries[indexes]
         users = batch_data[:, 0].astype(np.int32)
         items = batch_data[:, 1].astype(np.int32)
         inputs = {

@@ -4,10 +4,9 @@ import tensorflow as tf
 from itertools import combinations
 from tensorflow.keras import layers, regularizers, Model
 from tensorflow.keras.utils import Sequence, plot_model
-from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import History
-from tensorflow.keras.optimizers import Adagrad, Adam
-from DeepFM.data_utils import FEATURE_MAX, InputKeys
+from tensorflow.keras.optimizers import Adagrad
+from DeepFM.data_utils import FEATURE_INFOS, InputKeys
 from typing import Optional, List
 
 
@@ -19,34 +18,98 @@ class DeepFM(object):
         self.lv = lambda_v
         self.w_regularizer = regularizers.l2(self.lw)
         self.v_regularizer = regularizers.l2(self.lv)
-        self.inputs, linear_terms, cross_terms = [], [], []
+        self.inputs, linear_terms, v_embeddings = [], [], []
 
-        # For one-hot input
-        for key, max_ in FEATURE_MAX.items():
-            if key == InputKeys.GENRES:  # special
-                continue
-            inputs = layers.Input(shape=[1], name=key, dtype="int32")
-            # cross terms
-            cross_embedded = self.embedded(max_ + 1, self.K, self.v_regularizer, inputs)
-            # linear terms
-            linear_embedded = self.embedded(max_ + 1, 1, self.w_regularizer, inputs)
+        for key, info in FEATURE_INFOS.items():
+            inputs = layers.Input(shape=[info.length], name=key, dtype="int32")
+
+            w_embedded = self.w_embedded(info.max_id + 1, inputs)  # [batch, 1]
+            v_embedded = self.v_embedded(info.max_id + 1, inputs)   # [batch, K]
 
             self.inputs.append(inputs)
-            linear_terms.append(linear_embedded)
-            cross_terms.append(cross_embedded)
+            linear_terms.append(w_embedded)
+            v_embeddings.append(v_embedded)
 
-        # For multi-hot input
-        max_ = FEATURE_MAX[InputKeys.GENRES]
-        genres = layers.Input(shape=[max_ + 1], sparse=True, name=InputKeys.GENRES, dtype="int32")
-        cross_embedded = layers.Embedding(input_dim=max_ + 1, output_dim=self.K, input_length=max_ + 1,
-                                          embeddings_regularizer=self.v_regularizer)
-        cross_embedded
+        # FM part
+        cross_terms = self.cross_dot(v_embeddings)
+        self.y_1d = self.add(linear_terms)
+        self.y_2d = self.add(cross_terms)
 
+        # Deep part
+        deep = layers.Concatenate(axis=1)(v_embeddings)  # [batch, K * p]
+        for i in range(2):
+            deep = layers.Dropout(rate=0.5)(deep)
+            deep = layers.Dense(16, activation="relu")(deep)
+        self.y_deep = layers.Dense(1, "relu", name="deep_output")(deep)
+
+        # Output
+        y = layers.Concatenate()([self.y_1d, self.y_2d, self.y_deep])
+        y = layers.Dense(1, None, name="DeepFM_output")(y)
+
+        self.model = Model(self.inputs, y)
+        self.model.compile(
+            optimizer=Adagrad(learning_rate=self.lr),  # optimizers with momentum won't work with embedding in keras
+            loss="mse", metrics=["mae"]
+        )
+
+    def w_embedded(self, vocab_size: int, x: tf.Tensor):
+        x = layers.Embedding(input_dim=vocab_size, output_dim=1,
+                             embeddings_regularizer=self.w_regularizer,
+                             mask_zero=True)(x)
+        return layers.GlobalAvgPool1D()(x)
+
+    def v_embedded(self, vocab_size: int, x: tf.Tensor):
+        x = layers.Embedding(input_dim=vocab_size, output_dim=self.K,
+                             embeddings_regularizer=self.v_regularizer,
+                             mask_zero=True)(x)
+        return layers.GlobalAvgPool1D()(x)  # multi-hot will be averaged
 
     @staticmethod
-    def embedded(vocab_size: int, vec_length: int, embeddings_regularizer: regularizers.Regularizer,
-                 x: tf.Tensor):
-        e = layers.Embedding(input_dim=vocab_size, output_dim=vec_length,
-                             input_length=1, embeddings_regularizer=embeddings_regularizer)
-        x = layers.Flatten()(e(x))  # flatten not influence batch_size
-        return x
+    def cross_dot(tensors: List[tf.Tensor]) -> List[tf.Tensor]:
+        cross_values = []
+        for f1, f2 in combinations(tensors, 2):
+            dotted = layers.dot([f1, f2], axes=-1)
+            cross_values.append(dotted)
+        return cross_values
+
+    @staticmethod
+    def add(tensors: List[tf.Tensor]) -> tf.Tensor:
+        if len(tensors) == 1:
+            return tensors[0]
+        return layers.Add()(tensors)
+
+    def train(self, train_data: Sequence, test_data: Optional[Sequence] = None,
+              epochs: int = 1, callbacks=None) -> History:
+        h = self.model.fit_generator(
+            generator=train_data,
+            validation_data=test_data,
+            steps_per_epoch=5,
+            epochs=epochs,
+            verbose=1,
+            use_multiprocessing=False,
+            workers=4,
+            shuffle=False,
+            callbacks=callbacks
+        )
+        return h
+
+    def predict(self, users: np.ndarray, items: np.ndarray, occupations: np.ndarray, genres: np.ndarray) -> np.ndarray:
+        return self.model.predict(
+            {InputKeys.USER: users, InputKeys.ITEM: items,
+             InputKeys.OCCUPATION: occupations, InputKeys.GENRES: genres})\
+            .reshape(-1,)
+
+    def save_model(self, file: str):
+        self.model.save(file, overwrite=True)
+
+    def load_model(self, file: str):
+        self.model.load_weights(file)
+
+    def summary(self):
+        return self.model.summary()
+
+    def plot_model(self, file: str):
+        plot_model(self.model, file, show_shapes=True)
+
+
+

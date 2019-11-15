@@ -1,10 +1,11 @@
 
 import pandas as pd
 import numpy as np
-import scipy.sparse as sp
 from random import Random
 from tqdm import tqdm
 from tensorflow.keras.utils import Sequence
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from collections import namedtuple
 from _utils.dataset import load_movielens
 
 
@@ -13,13 +14,14 @@ TEST_SIZE = 0.2
 tqdm.pandas()
 _loader = load_movielens()
 _users, _movies, _ratings = _loader.users, _loader.movies, _loader.ratings
+_genres = {genre: index + 1 for index, genre in enumerate(_loader.genres)}  # keep `0` as padding
 
 
 def _make_data():
     rng = Random(SEED)
-    genres = {genre: index for index, genre in enumerate(_loader.genres)}
+
     _movies["genres"] = _movies["genres"]\
-        .progress_apply(lambda x: [genres[genre] for genre in x.split("|") if genre in genres])
+        .progress_apply(lambda x: [_genres[genre] for genre in x.split("|") if genre in _genres])
 
     data = _ratings.join(_users.set_index("user"), on="user")\
         .join(_movies.set_index("item"), on="item")[["user", "item", "genres", "occupation", "rating"]]
@@ -29,9 +31,7 @@ def _make_data():
 
 
 _train, _test = _make_data()
-DATA_ALAS = {"train": _train, "test": _test}
-LABEL = "rating"
-FEATURES = ["user", "item", "genres", "occupation"]
+DATA_ALIAS = {"train": _train, "test": _test}
 
 
 class InputKeys:
@@ -40,22 +40,32 @@ class InputKeys:
     GENRES = "genres"
     OCCUPATION = "occupation"
 
+    @classmethod
+    def features(cls):
+        return ["user", "item", "genres", "occupation"]
 
-FEATURE_MAX = {
-    "user": _users["user"].max(),               # 6040
-    "item": _movies["item"].max(),              # 3952
-    "genres": len(_loader.genres) - 1,          # 17
-    "occupation": _users["occupation"].max(),   # 20
+
+LABEL = "rating"
+FEATURES = InputKeys.features()
+TEST_Y_TRUE = _test[LABEL].values
+
+_FEATURE_INFO = namedtuple("FEATURE_INFO", ["length", "max_id"])
+
+FEATURE_INFOS = {
+    InputKeys.USER: _FEATURE_INFO(1, _users["user"].max()),               # 1, 6040
+    InputKeys.ITEM: _FEATURE_INFO(1, _movies["item"].max()),              # 1, 3952
+    InputKeys.GENRES: _FEATURE_INFO(3, max(_genres.values())),            # 3, 18
+    InputKeys.OCCUPATION: _FEATURE_INFO(1, _users["occupation"].max()),   # 1, 20
 }
 
 
 class DataGenerator(Sequence):
-    def __init__(self, data: pd.DataFrame, batch_size: int, seed: int):
+    def __init__(self, data: pd.DataFrame, batch_size: int, seed: int = SEED):
         self.entries = data
         self.batch_size = batch_size
         self._indexes = np.arange(len(self.entries))
         self._rng = Random(seed)
-        self._max_genre = FEATURE_MAX[InputKeys.GENRES]
+        self._max_genre_num, _ = FEATURE_INFOS[InputKeys.GENRES]
 
     def __len__(self):
         return len(self.entries) // self.batch_size
@@ -66,21 +76,22 @@ class DataGenerator(Sequence):
         inputs = {
             InputKeys.USER: batch_data[InputKeys.USER].values.reshape(-1, 1).astype(np.int32),
             InputKeys.ITEM: batch_data[InputKeys.ITEM].values.reshape(-1, 1).astype(np.int32),
-            InputKeys.OCCUPATION: batch_data[InputKeys.OCCUPATION].values.astype(np.int32),
-            InputKeys.GENRES: self._convert_to_csr(batch_data[InputKeys.GENRES].values, self._max_genre + 1)
+            InputKeys.OCCUPATION: batch_data[InputKeys.OCCUPATION].values.reshape(-1, 1).astype(np.int32),
+            InputKeys.GENRES: pad_sequences(
+                batch_data[InputKeys.GENRES].values, maxlen=self._max_genre_num, padding="post").astype(np.int32)
         }
         labels = batch_data[LABEL].values.astype(np.float32)
         return inputs, labels
 
-    @staticmethod
-    def _convert_to_csr(values: np.ndarray, n_cols: int):
-        row_indexes = []
-        col_indexes = []
-        for i, cols in enumerate(values):
-            row_indexes.extend([i] * len(cols))
-            col_indexes.extend(cols)
-        data = np.ones(len(row_indexes))
-        return sp.csr_matrix((data, (row_indexes, col_indexes)), shape=[len(values), n_cols])
+    # @staticmethod
+    # def _convert_to_csr(values: np.ndarray, n_cols: int):
+    #     row_indexes = []
+    #     col_indexes = []
+    #     for i, cols in enumerate(values):
+    #         row_indexes.extend([i] * len(cols))
+    #         col_indexes.extend(cols)
+    #     data = np.ones(len(row_indexes))
+    #     return sp.csr_matrix((data, (row_indexes, col_indexes)), shape=[len(values), n_cols])
 
     def on_epoch_end(self):
         self._rng.shuffle(self._indexes)

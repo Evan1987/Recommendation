@@ -21,8 +21,7 @@ class FM(object):
 
         const_input = layers.Input(shape=(1,), dtype="float32", name=f"{InputKeys.BIAS}")
         self.inputs.append(const_input)
-        linear_terms = []
-        cross_terms = []
+        linear_terms, cross_terms = [], []
         for name, n_features in FEATURE_MAX_NUM.items():
             inputs = layers.Input(shape=(1,), dtype="int32", name=f"{name}")
 
@@ -38,17 +37,13 @@ class FM(object):
 
         bias = layers.Dense(1, use_bias=False)(const_input)
         cross_terms = self.cross_dot(cross_terms)
-        linear_values = layers.concatenate(linear_terms, axis=1)
-        cross_values = layers.concatenate(cross_terms, axis=1) if len(cross_terms) > 1 else cross_terms[0]
-        linear = layers.Lambda(self.mean)(linear_values)
-        cross = layers.Lambda(self.mean)(cross_values)
 
-        y = layers.Add()([bias, linear, cross])
+        y = layers.Add()([bias, *cross_terms, *linear_terms])
 
         self._predict_func = K.function(self.inputs, outputs=y, name="pred_function")
         self.model = Model(inputs=self.inputs, outputs=y)
         self.model.compile(
-            optimizer=Adagrad(learning_rate=self.lr),  # Adadelta will fill
+            optimizer=Adagrad(learning_rate=self.lr),  # optimizers with momentum won't work with embedding in keras
             loss="mean_squared_error",
             metrics=["mae"]
         )
@@ -60,10 +55,6 @@ class FM(object):
             dotted = layers.dot([f1, f2], axes=1)
             cross_values.append(dotted)
         return cross_values
-
-    @staticmethod
-    def mean(tensors: List[tf.Tensor]):
-        return K.sum(tensors, axis=1, keepdims=True)
 
     @staticmethod
     def embedded(vocab_size: int, vec_length: int, embeddings_regularizer: regularizers.Regularizer,

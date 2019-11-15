@@ -55,4 +55,4 @@ if __name__ == '__main__':
     mse = mean_squared_error(TEST_Y_TRUE, y_pred)
     mae = mean_absolute_error(TEST_Y_TRUE, y_pred)
 
-    print(f"FM tf Model mse: {mse}, mae: {mae}")  # mse: 1.5542215914905462, mae: 1.0185522371233457
+    print(f"FM tf Model mse: {mse}, mae: {mae}")  # mse: 1.5467057672010385, mae: 1.0149061494326161

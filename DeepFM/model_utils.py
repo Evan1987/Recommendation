@@ -7,6 +7,7 @@ from tensorflow.keras.utils import Sequence, plot_model
 from tensorflow.keras.callbacks import History
 from tensorflow.keras.optimizers import Adagrad
 from DeepFM.data_utils import FEATURE_INFOS, InputKeys
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 from typing import Optional, List
 
 
@@ -83,7 +84,6 @@ class DeepFM(object):
         h = self.model.fit_generator(
             generator=train_data,
             validation_data=test_data,
-            steps_per_epoch=5,
             epochs=epochs,
             verbose=1,
             use_multiprocessing=False,
@@ -96,7 +96,8 @@ class DeepFM(object):
     def predict(self, users: np.ndarray, items: np.ndarray, occupations: np.ndarray, genres: np.ndarray) -> np.ndarray:
         return self.model.predict(
             {InputKeys.USER: users, InputKeys.ITEM: items,
-             InputKeys.OCCUPATION: occupations, InputKeys.GENRES: genres})\
+             InputKeys.OCCUPATION: occupations,
+             InputKeys.GENRES: genres})\
             .reshape(-1,)
 
     def save_model(self, file: str):

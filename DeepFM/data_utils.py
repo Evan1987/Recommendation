@@ -23,6 +23,8 @@ def _make_data():
     _movies["genres"] = _movies["genres"]\
         .progress_apply(lambda x: [_genres[genre] for genre in x.split("|") if genre in _genres])
 
+    _users["occupation"] += 1  # to avoid 0 padding mistake
+
     data = _ratings.join(_users.set_index("user"), on="user")\
         .join(_movies.set_index("item"), on="item")[["user", "item", "genres", "occupation", "rating"]]
 
@@ -50,13 +52,18 @@ FEATURES = InputKeys.features()
 TEST_Y_TRUE = _test[LABEL].values
 
 _FEATURE_INFO = namedtuple("FEATURE_INFO", ["length", "max_id"])
+_MAX_GENRE_NUM = 3
 
 FEATURE_INFOS = {
-    InputKeys.USER: _FEATURE_INFO(1, _users["user"].max()),               # 1, 6040
-    InputKeys.ITEM: _FEATURE_INFO(1, _movies["item"].max()),              # 1, 3952
-    InputKeys.GENRES: _FEATURE_INFO(3, max(_genres.values())),            # 3, 18
-    InputKeys.OCCUPATION: _FEATURE_INFO(1, _users["occupation"].max()),   # 1, 20
+    InputKeys.USER: _FEATURE_INFO(1, _users["user"].max()),                            # 1, 6040
+    InputKeys.ITEM: _FEATURE_INFO(1, _movies["item"].max()),                           # 1, 3952
+    InputKeys.GENRES: _FEATURE_INFO(_MAX_GENRE_NUM, max(_genres.values())),            # 3, 18
+    InputKeys.OCCUPATION: _FEATURE_INFO(1, _users["occupation"].max()),                # 1, 20
 }
+
+
+def pad_genres(genres: np.ndarray):
+    return pad_sequences(genres, maxlen=3, padding="post")
 
 
 class DataGenerator(Sequence):
@@ -65,7 +72,6 @@ class DataGenerator(Sequence):
         self.batch_size = batch_size
         self._indexes = np.arange(len(self.entries))
         self._rng = Random(seed)
-        self._max_genre_num, _ = FEATURE_INFOS[InputKeys.GENRES]
 
     def __len__(self):
         return len(self.entries) // self.batch_size
@@ -77,8 +83,7 @@ class DataGenerator(Sequence):
             InputKeys.USER: batch_data[InputKeys.USER].values.reshape(-1, 1).astype(np.int32),
             InputKeys.ITEM: batch_data[InputKeys.ITEM].values.reshape(-1, 1).astype(np.int32),
             InputKeys.OCCUPATION: batch_data[InputKeys.OCCUPATION].values.reshape(-1, 1).astype(np.int32),
-            InputKeys.GENRES: pad_sequences(
-                batch_data[InputKeys.GENRES].values, maxlen=self._max_genre_num, padding="post").astype(np.int32)
+            InputKeys.GENRES: pad_genres(batch_data[InputKeys.GENRES]).astype(np.int32)
         }
         labels = batch_data[LABEL].values.astype(np.float32)
         return inputs, labels

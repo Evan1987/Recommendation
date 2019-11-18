@@ -6,7 +6,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from _utils.utensorflow import get_session_config
 from DeepFM.model_utils import DeepFM
-from DeepFM.data_utils import DataGenerator, DATA_ALIAS, TEST_Y_TRUE, InputKeys
+from DeepFM.data_utils import DataGenerator, DATA_ALIAS, TEST_Y_TRUE, pad_genres
 from constant import PROJECT_HOME
 
 
@@ -49,12 +49,12 @@ if __name__ == '__main__':
         dfm.train(train_data, test_data, EPOCHS, callbacks)
         dfm.save_model(os.path.join(MODEL_DIR, "fm.h5"))
 
-    # y_pred = dfm.predict(
-    #     users=test["user"].values,
-    #     items=test["item"].values,
-    #     occupations=test["occupations"].values,
-    #     genres=test["genres"].values)
-    # mse = mean_squared_error(TEST_Y_TRUE, y_pred)
-    # mae = mean_absolute_error(TEST_Y_TRUE, y_pred)
-    #
-    # print(f"FM tf Model mse: {mse}, mae: {mae}")
+    y_pred = dfm.predict(
+        users=test["user"].values,
+        items=test["item"].values,
+        occupations=test["occupation"].values,
+        genres=pad_genres(test["genres"].values))
+    mse = mean_squared_error(TEST_Y_TRUE, y_pred)
+    mae = mean_absolute_error(TEST_Y_TRUE, y_pred)
+
+    print(f"FM tf Model mse: {mse}, mae: {mae}")

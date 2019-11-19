@@ -18,6 +18,7 @@ _genres = {genre: index + 1 for index, genre in enumerate(_loader.genres)}  # ke
 
 
 def _make_data():
+    """Make target train and test data."""
     rng = Random(SEED)
 
     _movies["genres"] = _movies["genres"]\
@@ -52,7 +53,7 @@ FEATURES = InputKeys.features()
 TEST_Y_TRUE = _test[LABEL].values
 
 _FEATURE_INFO = namedtuple("FEATURE_INFO", ["length", "max_id"])
-_MAX_GENRE_NUM = 3
+_MAX_GENRE_NUM = 3  # The max num of genres to considered, if less than it, will be padded 0s ta post.
 
 FEATURE_INFOS = {
     InputKeys.USER: _FEATURE_INFO(1, _users["user"].max()),                            # 1, 6040
@@ -63,7 +64,7 @@ FEATURE_INFOS = {
 
 
 def pad_genres(genres: np.ndarray):
-    return pad_sequences(genres, maxlen=3, padding="post")
+    return pad_sequences(genres, maxlen=_MAX_GENRE_NUM, padding="post")
 
 
 class DataGenerator(Sequence):

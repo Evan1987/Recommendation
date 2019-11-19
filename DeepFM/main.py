@@ -57,4 +57,11 @@ if __name__ == '__main__':
     mse = mean_squared_error(TEST_Y_TRUE, y_pred)
     mae = mean_absolute_error(TEST_Y_TRUE, y_pred)
 
-    print(f"FM tf Model mse: {mse}, mae: {mae}")
+    print(f"FM tf Model mse: {mse}, mae: {mae}")  # mse: 0.8620331151339465, mae: 0.741213627063182
+
+    weights = K.get_value(dfm.model.weights[-2]).reshape(-1)  # The last fc layers's coefficients
+    fm_1d_weight, fm_2d_weight, fm_deep_weight = weights
+    print(f"Contribution of different part of model:\n"
+          f"    1st Order: {fm_1d_weight}\n"        # -1.461919903755188
+          f"    2nd Order: {fm_2d_weight}\n"        # 1.7745516300201416
+          f"    Deep part: {fm_deep_weight}\n")     # 0.38498273491859436

@@ -7,12 +7,18 @@ from tensorflow.keras.utils import Sequence, plot_model
 from tensorflow.keras.callbacks import History
 from tensorflow.keras.optimizers import Adagrad
 from DeepFM.data_utils import FEATURE_INFOS, InputKeys
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 from typing import Optional, List
 
 
 class DeepFM(object):
     def __init__(self, k: int, learning_rate: float, lambda_w: float = 2e-4, lambda_v: float = 2e-4):
+        """
+        Initialize a DeepFM model based on tensorflow-keras
+        :param k: The size of hidden vector
+        :param learning_rate: The learning rate
+        :param lambda_w: The l2 regularizer parameter for 1-order coefficients
+        :param lambda_v: The l2 regularizer parameter for 2-order coefficients
+        """
         self.K = k
         self.lr = learning_rate
         self.lw = lambda_w
@@ -54,12 +60,14 @@ class DeepFM(object):
         )
 
     def w_embedded(self, vocab_size: int, x: tf.Tensor):
+        """The 1-order coefficient embedding"""
         x = layers.Embedding(input_dim=vocab_size, output_dim=1,
                              embeddings_regularizer=self.w_regularizer,
                              mask_zero=True)(x)
-        return layers.GlobalAvgPool1D()(x)
+        return layers.GlobalAvgPool1D()(x)  # multi-hot will be averaged
 
     def v_embedded(self, vocab_size: int, x: tf.Tensor):
+        """The 2-order coefficient embedding"""
         x = layers.Embedding(input_dim=vocab_size, output_dim=self.K,
                              embeddings_regularizer=self.v_regularizer,
                              mask_zero=True)(x)
@@ -67,6 +75,11 @@ class DeepFM(object):
 
     @staticmethod
     def cross_dot(tensors: List[tf.Tensor]) -> List[tf.Tensor]:
+        """
+        Simulate the pair-wise dot product between each vi, not use the simplified formula.
+        :param tensors: The embedding vectors of vi.
+        :return: A list of dot result(expected of shape [None, 1])
+        """
         cross_values = []
         for f1, f2 in combinations(tensors, 2):
             dotted = layers.dot([f1, f2], axes=-1)

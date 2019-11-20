@@ -73,4 +73,4 @@ if __name__ == '__main__':
     TEST[LABEL_COL] = np.hstack(targets)
     sub: pd.DataFrame = TEST[["id", LABEL_COL]]
     print(sub.head(10))
-    sub.to_csv(os.path.join(package_home, "submission.csv"), index=False)
+    sub.to_csv(os.path.join(package_home, "submission.csv"), index=False)   # expect 0.25~0.26 in gini for 5 epoch

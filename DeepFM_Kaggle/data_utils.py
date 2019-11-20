@@ -51,6 +51,7 @@ IGNORE_COLS = [
 ]
 
 LABEL_COL = "target"
+FEATURES = NUMERIC_COLS + CATEGORICAL_COLS
 
 
 def load_data():
@@ -71,9 +72,7 @@ def load_data():
             train_data.loc[cond, col] = miss_replacing
             test_data.loc[test_data[col] == -1, col] = miss_replacing
 
-    return train_data[NUMERIC_COLS + CATEGORICAL_COLS + [LABEL_COL]], \
-        test_data[NUMERIC_COLS + CATEGORICAL_COLS], \
-        replacing
+    return train_data[FEATURES + [LABEL_COL]], test_data[["id"] + FEATURES], replacing
 
 
 TRAIN, TEST, FEAT_REPLACE = load_data()
@@ -86,7 +85,6 @@ class DataGenerator(Sequence):
         self.batch_size = batch_size
         self._indexes = np.arange(len(self.entries))
         self._rng = random.Random(SEED)
-        self._features = NUMERIC_COLS + CATEGORICAL_COLS
 
     def __len__(self):
         return len(self.entries) // self.batch_size
@@ -94,7 +92,9 @@ class DataGenerator(Sequence):
     def __getitem__(self, index):
         indexes = self._indexes[index * self.batch_size: (index + 1) * self.batch_size]
         batch_data: pd.DataFrame = self.entries.iloc[indexes]
-        return batch_data[self._features], batch_data[LABEL_COL]
+        x = {feature: batch_data[feature].values.reshape(-1, 1) for feature in FEATURES}
+        y = batch_data[LABEL_COL].values
+        return x, y
 
     def on_epoch_end(self):
         self._rng.shuffle(self._indexes)

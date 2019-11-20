@@ -64,8 +64,7 @@ class CrossProduct(layers.Layer):
 
 
 class DeepFM(KerasModel):
-    def __init__(self, feature_size: int, learning_rate: float = 1e-3, k: int = 8):
-        self.feature_size = feature_size
+    def __init__(self, learning_rate: float = 1e-3, k: int = 8):
         self.K = k
         self.lr = learning_rate
         self.optimizer = optimizers.Adam(self.lr)

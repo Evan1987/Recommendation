@@ -16,6 +16,10 @@ BATCH_SIZE = 16
 LEARNING_RATE = 2e-3
 MODEL_DIR = os.path.join(package_home, "model")
 
+train, test = DATA_ALIAS["train"], DATA_ALIAS["test"]
+train_data = DataGenerator(train, BATCH_SIZE)
+test_data = DataGenerator(test, BATCH_SIZE)
+
 
 def get_callbacks():
     checkpoint_file = os.path.join(MODEL_DIR, "model_{epoch:02d}_{val_loss:.2f}.hdf5")
@@ -24,11 +28,6 @@ def get_callbacks():
     early_stop = EarlyStopping(monitor='val_loss', patience=3)
 
     return [checkpoint, early_stop]
-
-
-train, test = DATA_ALIAS["train"], DATA_ALIAS["test"]
-train_data = DataGenerator(train, BATCH_SIZE)
-test_data = DataGenerator(test, BATCH_SIZE)
 
 
 if __name__ == '__main__':
@@ -47,7 +46,7 @@ if __name__ == '__main__':
         dfm.load_model(saved_model_file)
     else:
         dfm.train(train_data, test_data, EPOCHS, callbacks)
-        dfm.save_model(os.path.join(MODEL_DIR, "fm.h5"))
+        dfm.save_model(saved_model_file)
 
     y_pred = dfm.predict(
         users=test["user"].values,

@@ -1,6 +1,7 @@
 
+import tensorflow as tf
 from tensorflow.keras import backend as K
-from tensorflow.keras import Model, layers, optimizers
+from tensorflow.keras import Model, layers, optimizers, regularizers
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.callbacks import History
 from DeepFM_Kaggle.data_utils import FEAT_SIZE, NUMERIC_COLS, CATEGORICAL_COLS
@@ -9,6 +10,7 @@ from _utils.utensorflow.model import KerasModel
 
 
 class GlobalSumPool(layers.Layer):
+    """An implementation for sum pool"""
     def __init__(self, axis, **kwargs):
         super(GlobalSumPool, self).__init__(**kwargs)
         self.supports_masking = True
@@ -42,6 +44,9 @@ class GlobalSumPool(layers.Layer):
 
 
 class CrossProduct(layers.Layer):
+    """An implementation for computing pair-wise dot-product for fm.
+    The output not reduce sum to single scalar(shape: [batch, 1]) just for further compatibility.
+    """
     def __init__(self, **kwargs):
         super(CrossProduct, self).__init__(**kwargs)
         self.supports_masking = False
@@ -57,16 +62,77 @@ class CrossProduct(layers.Layer):
         right = K.sum(right, axis=1)                         # [batch, K]
 
         sub = left - right                                   # [batch, K]
-        return K.sum(0.5 * sub, axis=1, keepdims=True)       # [batch, 1]
+        return 0.5 * sub                                     # [batch, K]
 
     def compute_output_shape(self, input_shape):
-        return tuple([input_shape[0], 1])
+        return tuple([input_shape[0], input_shape[2]])
+
+
+class PairWiseMultiply(layers.Layer):
+    def __init__(self, **kwargs):
+        super(PairWiseMultiply, self).__init__(**kwargs)
+        self.supports_masking = False
+
+    def call(self, inputs: tf.Tensor, **kwargs):
+        _, n, m = inputs.shape.as_list()
+        mask = self.build_mask(n)
+        left = K.expand_dims(inputs, axis=2)                # [batch, n, 1, m]
+        right = K.expand_dims(inputs, axis=1)               # [batch, 1, n, m]
+        out = left * right                                  # [batch, n, n, m]
+        return tf.boolean_mask(out, mask, axis=1)           # [batch, n * (n - 1) / 2, m]
+
+    @staticmethod
+    def build_mask(n: int):
+        """Build the upper(with the diag) indices mask for n * n matrix"""
+        ones = tf.ones(shape=(n, n), dtype="int32")
+        upper = tf.matrix_band_part(ones, 0, -1)
+        diag = tf.matrix_band_part(ones, 0, 0)
+        return tf.cast(upper - diag, dtype="bool")          # [n, n]
+
+    def compute_output_shape(self, input_shape):
+        batch, n, m = input_shape
+        return tuple([batch, n * (n - 1) // 2, m])
+
+
+class Attention(layers.Layer):
+    def __init__(self, units: int = 64, l2_reg: float = 0.01, **kwargs):
+        super(Attention, self).__init__(**kwargs)
+        self.units = units
+        self.l2_reg = l2_reg
+        self.regularizer = regularizers.l2(l2_reg)
+        self.supports_masking = False
+
+    def build(self, input_shape):
+        """Add variables
+        :param input_shape: [batch, T, K], where `T = #FEAT * (#FEAT - 1) / 2` is the total interaction size. K is the
+            embedding vector's length.
+        """
+        self.h = self.add_weight(name="h", shape=[self.units, 1], initializer=tf.zeros_initializer())
+        self.dense = layers.Dense(units=self.units,
+                                  activation="relu",
+                                  use_bias=True,
+                                  kernel_regularizer=self.regularizer,
+                                  bias_regularizer=self.regularizer)
+
+    def call(self, inputs: tf.Tensor, **kwargs):
+        inner = self.dense(inputs)                  # [batch, T, units]
+        outer = tf.matmul(inner, self.h)            # [batch, T, 1]
+        outputs = tf.nn.softmax(outer, axis=1)      # [batch, T, 1]
+        return outputs
 
 
 class DeepFM(KerasModel):
-    def __init__(self, learning_rate: float = 1e-3, k: int = 8):
+    _valid_model_types = ["deepfm", "nfm", "afm"]
+
+    def __init__(self, learning_rate: float = 1e-3, k: int = 8, model_type: str = "deepfm",
+                 use_2d: bool = True, use_1d: bool = True):
+        if model_type not in self._valid_model_types:
+            raise ValueError(f"Unknown model type `{model_type}`, possible choices are {self._valid_model_types}")
         self.K = k
         self.lr = learning_rate
+        self.model_type = model_type
+        self.use_2d = use_2d
+        self.use_1d = use_1d
         self.optimizer = optimizers.Adam(self.lr)
 
         self.inputs, embed_cols = [], []
@@ -96,12 +162,20 @@ class DeepFM(KerasModel):
         self.y_1d = layers.Concatenate(axis=1)([dense_numeric, dense_categorical])  # [batch, #FEAT, 1]
         self.y_1d = GlobalSumPool(axis=1)(self.y_1d)                                # [batch, 1] -> 1d for last layer
 
-        # 2-order use simplified formula
+        # 2-order
         emb = layers.Concatenate(axis=1)(embed_cols)                          # [batch, #FEAT, K]
-        self.y_2d = CrossProduct()(emb)                                       # [batch, 1] -> 2d for last layer
+        if self.model_type == "afm":
+            self.y_2d = PairWiseMultiply()(emb)                              # [batch, #FEAT * (#FEAT - 1) / 2, K]
+        elif self.model_type == "deepfm":
+            self.y_2d = GlobalSumPool(axis=1)(CrossProduct()(emb))            # [batch, 1]
+        elif self.model_type == "nfm":
+            self.y_2d = CrossProduct()(emb)                                   # [batch, K]
 
         # deep order
-        self.y_deep = layers.Flatten()(emb)                                   # [batch, #FEAT * K]
+        if self.model_type == "deepfm":
+            self.y_deep = layers.Flatten()(emb)                               # [batch, #FEAT * K]
+        elif self.model_type == "nfm":
+            self.y_deep = self.y_2d                                           # [batch, K]
         for _ in range(2):
             self.y_deep = layers.Dense(32, activation="relu")(self.y_deep)
             self.y_deep = layers.Dropout(0.5)(self.y_deep)
@@ -109,8 +183,14 @@ class DeepFM(KerasModel):
         self.y_deep = layers.Dense(1, activation="relu")(self.y_deep)
         self.y_deep = layers.Dropout(0.5)(self.y_deep)                        # [batch, 1] -> deep for last layer
 
-        self.y = layers.Concatenate()([self.y_1d, self.y_2d, self.y_deep])    # [batch, 3] -> last layer
-        self.y = layers.Dense(1, activation="sigmoid")(self.y)                # [batch, 1] -> output
+        last_layers = [self.y_deep]
+        if self.use_1d:
+            last_layers.append(self.y_1d)
+        if self.use_2d:
+            last_layers.append(self.y_2d)
+
+        self.y = layers.Concatenate()(last_layers)                           # [batch, *] -> last layer
+        self.y = layers.Dense(1, activation="sigmoid")(self.y)               # [batch, 1] -> output
 
         self._model = Model(inputs=self.inputs, outputs=self.y)
         self._model.compile(optimizer=self.optimizer, loss="binary_crossentropy")

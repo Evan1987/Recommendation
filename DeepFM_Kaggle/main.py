@@ -19,7 +19,6 @@ from _utils.utensorflow import get_session_config
 
 
 package_home = os.path.join(PROJECT_HOME, "DeepFM_Kaggle")
-MODEL_TYPE = "nfm"
 BATCH_SIZE = 64
 EPOCHS = 5
 SEED = 0
@@ -55,7 +54,7 @@ if __name__ == '__main__':
     K.clear_session()
     K.set_session(tf.Session(config=get_session_config()))
 
-    model = DeepFM(learning_rate=1e-3, k=8, model_type=MODEL_TYPE)
+    model = DeepFM(learning_rate=1e-3, k=8, model_type="afm", final_dnn=False)
     model.summary()
     model.plot_model(os.path.join(MODEL_DIR, f"{model.model_type}.png"))
 

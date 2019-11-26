@@ -5,7 +5,7 @@ from tensorflow.keras import Model, layers, optimizers, regularizers
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.callbacks import History
 from DeepFM_Kaggle.data_utils import FEAT_SIZE, NUMERIC_COLS, CATEGORICAL_COLS
-from typing import Optional
+from typing import Optional, List
 from _utils.utensorflow.model import KerasModel
 
 
@@ -95,6 +95,7 @@ class PairWiseMultiply(layers.Layer):
 
 
 class Attention(layers.Layer):
+    """Give the attention weight for each pair of cross-product features"""
     def __init__(self, units: int = 64, l2_reg: float = 0.01, **kwargs):
         super(Attention, self).__init__(**kwargs)
         self.units = units
@@ -107,17 +108,28 @@ class Attention(layers.Layer):
         :param input_shape: [batch, T, K], where `T = #FEAT * (#FEAT - 1) / 2` is the total interaction size. K is the
             embedding vector's length.
         """
-        self.h = self.add_weight(name="h", shape=[self.units, 1], initializer=tf.zeros_initializer())
+        k = tf.TensorShape(input_shape).as_list()[-1]
+        self.h = self.add_weight(name="attention_hidden", shape=[self.units, 1], initializer=tf.zeros_initializer())
+        self.p = self.add_weight(name="pool_weight", shape=[k, 1], initializer=tf.zeros_initializer())
         self.dense = layers.Dense(units=self.units,
                                   activation="relu",
                                   use_bias=True,
                                   kernel_regularizer=self.regularizer,
                                   bias_regularizer=self.regularizer)
 
+    def attention(self, inputs: tf.Tensor):
+        """Calculate attention weights"""
+        inner = self.dense(inputs)                                  # [batch, #FEAT * (#FEAT - 1) / 2, units]
+        outer = tf.matmul(inner, self.h)                            # [batch, #FEAT * (#FEAT - 1) / 2, 1]
+        return tf.nn.softmax(outer, axis=1)                         # [batch, #FEAT * (#FEAT - 1) / 2, 1]
+
     def call(self, inputs: tf.Tensor, **kwargs):
-        inner = self.dense(inputs)                  # [batch, T, units]
-        outer = tf.matmul(inner, self.h)            # [batch, T, 1]
-        outputs = tf.nn.softmax(outer, axis=1)      # [batch, T, 1]
+        """Make attention pooling
+        :param inputs:   shape [batch, #FEAT * (#FEAT - 1) / 2, K] """
+        att_w = self.attention(inputs)                              # [batch, #FEAT * (#FEAT - 1) / 2, 1]
+        weighted_inputs = inputs * att_w                            # [batch, #FEAT * (#FEAT - 1) / 2, K]
+        weighted_inputs = K.sum(weighted_inputs, axis=1)            # [batch, K]
+        outputs = tf.matmul(weighted_inputs, self.p)                # [batch, 1]
         return outputs
 
 
@@ -125,7 +137,7 @@ class DeepFM(KerasModel):
     _valid_model_types = ["deepfm", "nfm", "afm"]
 
     def __init__(self, learning_rate: float = 1e-3, k: int = 8, model_type: str = "deepfm",
-                 use_2d: bool = True, use_1d: bool = True):
+                 use_2d: bool = None, use_1d: bool = True, final_dnn: bool = False):
         if model_type not in self._valid_model_types:
             raise ValueError(f"Unknown model type `{model_type}`, possible choices are {self._valid_model_types}")
         self.K = k
@@ -133,6 +145,10 @@ class DeepFM(KerasModel):
         self.model_type = model_type
         self.use_2d = use_2d
         self.use_1d = use_1d
+        if self.use_2d is None and self.model_type in ["nfm", "afm"]:
+            self.use_2d = False
+
+        self.final_dnn = final_dnn
         self.optimizer = optimizers.Adam(self.lr)
 
         self.inputs, embed_cols = [], []
@@ -164,36 +180,85 @@ class DeepFM(KerasModel):
 
         # 2-order
         emb = layers.Concatenate(axis=1)(embed_cols)                          # [batch, #FEAT, K]
-        if self.model_type == "afm":
-            self.y_2d = PairWiseMultiply()(emb)                              # [batch, #FEAT * (#FEAT - 1) / 2, K]
-        elif self.model_type == "deepfm":
-            self.y_2d = GlobalSumPool(axis=1)(CrossProduct()(emb))            # [batch, 1]
-        elif self.model_type == "nfm":
-            self.y_2d = CrossProduct()(emb)                                   # [batch, K]
 
-        # deep order
         if self.model_type == "deepfm":
-            self.y_deep = layers.Flatten()(emb)                               # [batch, #FEAT * K]
+            self.y = self.deep_fm(self.y_1d, emb)
         elif self.model_type == "nfm":
-            self.y_deep = self.y_2d                                           # [batch, K]
-        for _ in range(2):
-            self.y_deep = layers.Dense(32, activation="relu")(self.y_deep)
-            self.y_deep = layers.Dropout(0.5)(self.y_deep)
-
-        self.y_deep = layers.Dense(1, activation="relu")(self.y_deep)
-        self.y_deep = layers.Dropout(0.5)(self.y_deep)                        # [batch, 1] -> deep for last layer
-
-        last_layers = [self.y_deep]
-        if self.use_1d:
-            last_layers.append(self.y_1d)
-        if self.use_2d:
-            last_layers.append(self.y_2d)
-
-        self.y = layers.Concatenate()(last_layers)                           # [batch, *] -> last layer
-        self.y = layers.Dense(1, activation="sigmoid")(self.y)               # [batch, 1] -> output
+            self.y = self.nfm(self.y_1d, emb)
+        elif self.model_type == "afm":
+            self.y = self.afm(self.y_1d, emb)
 
         self._model = Model(inputs=self.inputs, outputs=self.y)
         self._model.compile(optimizer=self.optimizer, loss="binary_crossentropy")
+
+    @staticmethod
+    def dnn(x: tf.Tensor):
+        """Deep part for common deep-fm hidden layers
+        :return: Tensor in [batch, 1] shape
+        """
+        for _ in range(2):
+            x = layers.Dense(32, activation="relu")(x)
+            x = layers.Dropout(0.5)(x)
+
+        x = layers.Dense(1, activation="relu")(x)
+        return layers.Dropout(0.5)(x)
+
+    def final_output(self, tensors: List[tf.Tensor]):
+        """Give the final output for last layer of concat tensors."""
+        if len(tensors) > 1:
+            y = layers.Concatenate()(tensors)
+        else:
+            y = tensors[0]
+        if self.final_dnn:
+            return layers.Dense(1, activation="sigmoid")(y)
+        return layers.Softmax()(GlobalSumPool(axis=1)(y))
+
+    def deep_fm(self, y_1d: tf.Tensor, embeddings: tf.Tensor):
+        """Treat all inputs in deep-fm method
+        :param y_1d:            shape [batch, 1]
+        :param embeddings:      shape [batch, #FEAT, K]
+        :return: final output   shape [batch, 1]
+        """
+        y_2d = GlobalSumPool(axis=1)(CrossProduct()(embeddings))        # [batch, 1]
+        y_deep = layers.Flatten()(embeddings)                           # [batch, #FEAT * K]
+        y_deep = self.dnn(y_deep)                                       # [batch, 1]
+        last_layer = []
+        if self.use_1d:
+            last_layer.append(y_1d)
+        if self.use_2d:
+            last_layer.append(y_2d)
+        last_layer.append(y_deep)
+        return self.final_output(last_layer)
+
+    def nfm(self, y_1d: tf.Tensor, embeddings: tf.Tensor):
+        """Treat all inputs in nfm method
+        :param y_1d:            shape [batch, 1]
+        :param embeddings:      shape [batch, #FEAT, K]
+        :return: final output   shape [batch, 1]
+        """
+        y_2d = CrossProduct()(embeddings)                               # [batch, K]
+        y_deep = self.dnn(y_2d)                                         # [batch, 1]
+        last_layer = []
+        if self.use_1d:
+            last_layer.append(y_1d)
+        if self.use_2d:
+            last_layer.append(y_2d)
+        last_layer.append(y_deep)
+        return self.final_output(last_layer)
+
+    def afm(self, y_1d: tf.Tensor, embeddings: tf.Tensor):
+        """Treat all inputs in afm method
+        :param y_1d:            shape [batch, 1]
+        :param embeddings:      shape [batch, #FEAT, K]
+        :return: final output   shape [batch, 1]
+        """
+        y_2d = PairWiseMultiply()(embeddings)                           # [batch, #FEAT * (#FEAT - 1) / 2, K]
+        y_deep = Attention(64)(y_2d)                                    # [batch, 1]
+        last_layer = []
+        if self.use_1d:
+            last_layer.append(y_1d)
+        last_layer.append(y_deep)
+        return self.final_output(last_layer)
 
     @property
     def model(self):

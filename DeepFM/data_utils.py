@@ -52,7 +52,7 @@ LABEL = "rating"
 FEATURES = InputKeys.features()
 TEST_Y_TRUE = _test[LABEL].values
 
-_FEATURE_INFO = namedtuple("FEATURE_INFO", ["length", "max_id"])
+_FEATURE_INFO = namedtuple("FEATURE_INFO", ["length", "max_id"])  # input_length, max_id
 _MAX_GENRE_NUM = 3  # The max num of genres to considered, if less than it, will be padded 0s ta post.
 
 FEATURE_INFOS = {

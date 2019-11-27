@@ -27,6 +27,7 @@ class NCF(KerasModel):
             inputs = layers.Input(shape=(1,), name=key, dtype="int32")
             self.inputs.append(inputs)
 
+            # same as embedding
             one_hotted = layers.Lambda(self.one_hot, arguments={"num_classes": max_id + 1}, input_shape=(1,))(inputs)
             gmf_dense = layers.Dense(self.K, activation="relu", name=f"{key}_gmf_dense")(one_hotted)
             self.gmf[key] = gmf_dense

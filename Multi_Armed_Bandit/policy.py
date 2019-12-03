@@ -2,6 +2,8 @@
 import abc
 import math
 import numpy as np
+import warnings
+import scipy.stats as ss
 from random import Random
 from .bandit import Bandit
 from typing import Dict, Iterable, Callable, Any
@@ -9,8 +11,8 @@ from typing import Dict, Iterable, Callable, Any
 
 class Policy(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def step(self, bandits: Iterable[Bandit]) -> float:
-        pass
+    def step(self, bandits: Iterable[Bandit], **kwargs) -> float:
+        raise NotImplementedError
 
 
 class _Entry(object):
@@ -44,7 +46,7 @@ class EGreedy(Policy):
             return self._rng.choice(bandits)
         return max(self.logs, key=lambda k: self.logs[k].expect_score)
 
-    def step(self, bandits: Iterable[Bandit]) -> float:
+    def step(self, bandits: Iterable[Bandit], **kwargs) -> float:
         bandit = self.choice(bandits)
         _, score = bandit.play()                                          # get the score reward
         self.logs.setdefault(bandit, _Entry.empty()).update(score)     # update the logs
@@ -82,7 +84,7 @@ class UCB1(Policy):
     def choice(self):
         return max(self.logs, key=lambda k: self._upper_bound(self.logs[k]))
 
-    def step(self, bandits: Iterable[Bandit]) -> float:
+    def step(self, bandits: Iterable[Bandit], **kwargs) -> float:
         # Initialize
         for bandit in bandits:
             if bandit not in self.logs:
@@ -98,38 +100,52 @@ class UCB1(Policy):
 
 
 class LinUCB(Policy):
-    def __init__(self, alpha: float, rp: float, rf: float, d: int):
+    def __init__(self, d: int, alpha: float = None, confidence: float = None):
         """
         Initialize a Lin-UCB policy which is a contextual bandit algorithm
-        :param alpha: The hyper-parameter
-        :param rp: The positive reward score
-        :param rf: The negative reward score
         :param d: The length of contextual features
+        :param alpha: The hyper-parameter for setting confidence degree
+        :param confidence: The hyper-parameter for setting confidence degree
+                at least one of `alpha` and `confidence` should be set.
         """
-        self.alpha = alpha
-        self.rp = rp
-        self.rf = rf
+        if alpha is None and confidence is None:
+            raise ValueError("`alpha` or `confidence` should be set.")
+        if alpha is None and confidence is not None:
+            self.confidence = confidence
+            self.alpha = ss.norm.ppf(0.5 + confidence / 2)
+        else:
+            if alpha is not None and confidence is not None:
+                warnings.warn("both `alpha` and `confidence` have been set, only use `alpha` next.", category=Warning)
+            self.alpha = alpha
+            self.confidence = 2 * ss.norm.cdf(alpha) - 1
+
         self.d = d
-        self.Aa: Dict[Any, np.ndarray] = {}  # collection of matrix(d * d) to compute disjoint part for each item
-        self.AaI: Dict[Any, np.ndarray] = {}  # store the inverse of Aa matrix
-        self.ba: Dict[Any, np.ndarray] = {}  # collection of vectors(d * 1) to compute disjoint part
-        self.theta = {}
-        self.a_max = 0
-        self.x = None
-        self.xT = None
+        self.theta: Dict[Bandit, np.ndarray] = {}           # The theta for each bandit, value shape: d * 1
+        self.A: Dict[Bandit, np.ndarray] = {}               # The A for each bandit, value shape: d * d
+        self.A_inv: Dict[Bandit, np.ndarray] = {}           # The inv of A for each bandit, value shape: d * d
+        self.b: Dict[Bandit, np.ndarray] = {}               # The b for each bandit, value shape: d * 1
 
-    def initialize(self, bandits: Iterable[Bandit]):
+    def choice_score(self, theta: np.ndarray, A_inv: np.ndarray, feature: np.ndarray):
+        expect_score = np.dot(theta, feature)
+        delta = np.sqrt(feature.T @ A_inv @ feature)
+        return expect_score + self.alpha * delta
+
+    def step(self, bandits: Iterable[Bandit], features: Dict[Bandit, np.ndarray]) -> float:
         for bandit in bandits:
-            self.Aa[bandit] = np.identity(self.d, dtype=np.float32)
-            self.ba[bandit] = np.zeros((self.d, 1), dtype=np.float32)
-            self.AaI[bandit] = np.identity(self.d, dtype=np.float32)
-            self.theta[bandit] = np.zeros((self.d, 1), dtype=np.float32)
+            if bandit not in self.theta:
+                self.A[bandit] = np.identity(self.d, dtype=np.float32)
+                self.b[bandit] = np.zeros((self.d, 1), dtype=np.float32)
+                self.A_inv[bandit] = np.identity(self.d, dtype=np.float32)
+                self.theta[bandit] = np.zeros((self.d, 1), dtype=np.float32)
 
-    def update(self, reward: float):
-        pass
-
-    def step(self, bandits: Iterable[Bandit]) -> float:
-        pass
+        bandit = max(self.theta,
+                     key=lambda k: self.choice_score(self.theta[k], self.A_inv[k], features[k]))
+        r = bandit.play()
+        self.A[bandit] += features[bandit] @ features[bandit].T
+        self.b[bandit] += features[bandit] * r
+        self.A_inv[bandit] = np.linalg.inv(self.A[bandit])
+        self.theta[bandit] = self.A_inv[bandit] @ self.b[bandit]
+        return r
 
 
 class ThompsonSampling(Policy):
@@ -163,7 +179,7 @@ class ThompsonSampling(Policy):
     def choice(self):
         return max(self.logs, key=lambda k: self.logs[k].rand())
 
-    def step(self, bandits: Iterable[Bandit]) -> float:
+    def step(self, bandits: Iterable[Bandit], **kwargs) -> float:
         # Initialize
         for bandit in bandits:
             if bandit not in self.logs:
@@ -176,6 +192,3 @@ class ThompsonSampling(Policy):
         else:
             self.logs[bandit].add_neg(1)
         return score
-
-
-

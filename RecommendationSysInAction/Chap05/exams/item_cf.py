@@ -119,7 +119,7 @@ class ItemCFRecommend(object):
         for item, score in recall_items.items():
             r.push(score, item)
 
-        return r.queue()
+        return r.items()
 
     def evaluation(self, k: int = 8, n_items: int = 10) -> Tuple[float, float]:
         """Compute precision and recall"""
@@ -137,9 +137,9 @@ class ItemCFRecommend(object):
                 if pred_item in test_items:
                     hit += 1
 
-        recall = hit / test_num
-        precision = hit / pred_num
-        return precision, recall
+        recall_ = hit / test_num
+        precision_ = hit / pred_num
+        return precision_, recall_
 
 
 if __name__ == '__main__':

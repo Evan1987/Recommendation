@@ -11,7 +11,8 @@ from typing import Dict
 
 tqdm.pandas()
 SEED = 1234
-DATA_PATH = os.path.join(PROJECT_HOME, "DIN/data")
+PACKAGE_HOME = os.path.join(PROJECT_HOME, "DIN")
+DATA_PATH = os.path.join(PACKAGE_HOME, "data")
 DATASET_FILE = os.path.join(DATA_PATH, "dataset.pkl")
 CATE_MAPPING_FILE = os.path.join(DATA_PATH, "cate_mapping.txt")
 

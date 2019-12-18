@@ -18,11 +18,15 @@ class Policy(metaclass=abc.ABCMeta):
 class _Entry(object):
     def __init__(self, n: int, expect_score: float):
         self.n = n
-        self.expect_score = expect_score
+        self._expect_score = expect_score
 
     def update(self, score: float):
         self.n += 1
-        self.expect_score += ((score - self.expect_score) / self.n)
+        self._expect_score += ((score - self._expect_score) / self.n)
+
+    @property
+    def expect_score(self):
+        return self._expect_score
 
     @classmethod
     def empty(cls):
@@ -49,7 +53,7 @@ class EGreedy(Policy):
     def step(self, bandits: Iterable[Bandit], **kwargs) -> float:
         bandit = self.choice(bandits)
         _, score = bandit.play()                                          # get the score reward
-        self.logs.setdefault(bandit, _Entry.empty()).update(score)     # update the logs
+        self.logs.setdefault(bandit, _Entry.empty()).update(score)        # update the logs
         return score
 
 
@@ -70,7 +74,7 @@ class DecreasingEGreedy(EGreedy):
 
     @property
     def epsilon(self):
-        return 1 / math.log(len(self.seen) + 1e-3)
+        return 1 / math.log10(len(self.seen) + 1e-3)   # There's problem with small num of total bandits
 
 
 class UCB1(Policy):
@@ -79,7 +83,7 @@ class UCB1(Policy):
         self.n = 0
 
     def _upper_bound(self, x: _Entry):
-        return x.expect_score + math.sqrt(2 * math.log(self.n) / x.n)
+        return x.expect_score + math.sqrt(2 * math.log10(self.n) / x.n)
 
     def choice(self):
         return max(self.logs, key=lambda k: self._upper_bound(self.logs[k]))

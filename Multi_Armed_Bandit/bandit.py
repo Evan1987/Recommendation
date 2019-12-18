@@ -30,6 +30,9 @@ class Bandit(object):
             return True, self.pos_reward
         return False, self.neg_reward
 
+    def __repr__(self):
+        return f"Bandit({self.identifier})"
+
     def __hash__(self):
         return self.identifier
 
@@ -47,4 +50,4 @@ def generate_multi_armed_bandits(num: int, seed: int) -> List[Bandit]:
     :return: A list of bandits.
     """
     rng = Random(seed)
-    return [Bandit(identifier=i, p=rng.uniform(0, 0.5), seed=10 * i) for i in range(num)]
+    return [Bandit(identifier=i, p=rng.uniform(0, 0.2), seed=10 * i) for i in range(num)]

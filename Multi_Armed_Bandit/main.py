@@ -1,7 +1,7 @@
 
 import os
 from concurrent.futures import ProcessPoolExecutor
-from Multi_Armed_Bandit.bandit import generate_multi_armed_bandits
+from Multi_Armed_Bandit.bandit import generate_multi_armed_bandits, Bandit
 from Multi_Armed_Bandit.policy import EGreedy, DecreasingEGreedy, UCB1, ThompsonSampling
 from constant import PROJECT_HOME
 
@@ -10,7 +10,7 @@ package_home = os.path.join(PROJECT_HOME, "Multi_Armed_Bandit")
 output_path = os.path.join(package_home, "output")
 os.makedirs(output_path, exist_ok=True)
 
-N = 20
+N = 10
 T = 100000
 SEED = 2019
 policies = {
@@ -20,10 +20,9 @@ policies = {
     "ucb1": UCB1(),
 }
 
-bandits = generate_multi_armed_bandits(N, SEED)
-
 
 def evaluation(policy_name: str):
+    bandits = generate_multi_armed_bandits(N, SEED)
     policy = policies[policy_name]
     choices_log = []
     for _ in range(T):
@@ -38,4 +37,4 @@ def evaluation(policy_name: str):
 
 if __name__ == '__main__':
     with ProcessPoolExecutor(max_workers=len(policies)) as pool:  # to guarantee the env equality for each policy
-        pool.map(evaluation, policies.keys())
+        pool.map(evaluation, policies.keys(),)

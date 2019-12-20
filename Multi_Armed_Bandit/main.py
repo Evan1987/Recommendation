@@ -16,7 +16,7 @@ SEED = 2019
 policies = {
     "e_greedy": EGreedy(epsilon=0.05, seed=SEED),
     "decreasing_e_greedy": DecreasingEGreedy(seed=SEED),
-    "Thompson_sampling": ThompsonSampling(10, 20),
+    "Thompson_sampling": ThompsonSampling(10, 50),
     "ucb1": UCB1(),
 }
 

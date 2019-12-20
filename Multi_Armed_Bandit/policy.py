@@ -134,7 +134,7 @@ class LinUCB(Policy):
         delta = np.sqrt(feature.T @ A_inv @ feature)
         return expect_score + self.alpha * delta
 
-    def step(self, bandits: Iterable[Bandit], features: Dict[Bandit, np.ndarray]) -> float:
+    def step(self, bandits: Iterable[Bandit], features: Dict[Bandit, np.ndarray], **kwargs) -> float:
         for bandit in bandits:
             if bandit not in self.theta:
                 self.A[bandit] = np.identity(self.d, dtype=np.float32)

@@ -9,8 +9,8 @@ import logging
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from _utils.ucollections import PriorityQueue
-from _utils.context import timer
+from evan_utils.ucollections import PriorityQueue
+from evan_utils.context import timer
 from typing import Dict, Set, Tuple, Optional, List
 
 

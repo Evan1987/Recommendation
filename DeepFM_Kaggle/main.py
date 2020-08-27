@@ -15,7 +15,7 @@ from DeepFM_Kaggle.model_utils import DeepFM
 from DeepFM_Kaggle.callbacks import GiniCheckPoint
 from DeepFM_Kaggle.data_utils import DataGenerator, TRAIN, TEST, LABEL_COL, FEATURES
 from constant import PROJECT_HOME
-from _utils.utensorflow import get_session_config
+from evan_utils.utensorflow import get_session_config
 
 
 package_home = os.path.join(PROJECT_HOME, "DeepFM_Kaggle")

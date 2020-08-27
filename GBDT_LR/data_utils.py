@@ -5,7 +5,7 @@ The base treatment with dataset
 
 import os
 import pandas as pd
-from _utils.constant import PUBLIC_SOURCE_PATH
+from evan_utils.constant import PUBLIC_SOURCE_PATH
 
 
 SEED = 2017

@@ -5,7 +5,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from DIN.data_utils import DataGenerator, dataset, cate_mapping, PACKAGE_HOME, InputKeys
 from DIN.model_utils_base import DeepInterestNet
-from _utils.utensorflow import get_session_config
+from evan_utils.utensorflow import get_session_config
 
 
 BATCH_SIZE = 32

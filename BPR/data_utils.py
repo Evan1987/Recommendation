@@ -1,7 +1,7 @@
 
 import numpy as np
 import pandas as pd
-from _utils.dataset import load_movielens
+from evan_utils.dataset import load_movielens
 from typing import Tuple, Dict
 
 

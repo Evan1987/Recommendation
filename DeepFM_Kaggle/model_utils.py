@@ -6,7 +6,7 @@ from tensorflow.keras.utils import Sequence
 from tensorflow.keras.callbacks import History
 from DeepFM_Kaggle.data_utils import FEAT_SIZE, NUMERIC_COLS, CATEGORICAL_COLS
 from typing import Optional, List
-from _utils.utensorflow.model import KerasModel
+from evan_utils.utensorflow.model import KerasModel
 
 
 class GlobalSumPool(layers.Layer):

@@ -7,7 +7,7 @@ try:
 except ImportError as e:
     print("Importing error for `pearson`", e)
     from RecommendationSysInAction.Chap02.utils import pearson  # possibly be used for directly test
-from _utils.ucollections import PriorityQueue
+from evan_utils.ucollections import PriorityQueue
 from collections import defaultdict
 from typing import Dict, Any, List
 
@@ -58,7 +58,7 @@ class FirstRec(object):
 
 
 if __name__ == '__main__':
-    from _utils.context import timer
+    from evan_utils.context import timer
     json_file = os.path.join(os.path.dirname(__file__), "data/train.json")
     rec = FirstRec.from_json_file(json_file, k=15, n=20)
     with timer(name="Recommend Test"):  # ~30 ms

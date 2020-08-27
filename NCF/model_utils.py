@@ -5,7 +5,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.callbacks import History
 from NCF.data_utils import InputKeys, FEATURE_MAX_INFOS
-from _utils.utensorflow.model import KerasModel
+from evan_utils.utensorflow.model import KerasModel
 from typing import Optional
 
 

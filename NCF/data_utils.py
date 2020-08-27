@@ -4,7 +4,7 @@ import pandas as pd
 from random import Random
 from tqdm import tqdm
 from tensorflow.keras.utils import Sequence
-from _utils.dataset import load_movielens
+from evan_utils.dataset import load_movielens
 
 tqdm.pandas()
 SEED = 2017

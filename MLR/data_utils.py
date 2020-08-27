@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 from random import Random
-from _utils.dataset import load_adult
+from evan_utils.dataset import load_adult
 from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.utils import Sequence
 

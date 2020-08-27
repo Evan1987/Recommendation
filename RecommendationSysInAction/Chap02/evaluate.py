@@ -4,7 +4,7 @@ import os
 import json
 import tqdm
 from RecommendationSysInAction.Chap02.recommend import FirstRec
-from _utils.context import timer
+from evan_utils.context import timer
 from typing import Dict
 
 

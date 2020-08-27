@@ -9,8 +9,8 @@ import logging
 from tqdm import tqdm
 from jieba.analyse import extract_tags
 from RecommendationSysInAction.NewsRecSys.NewsRecSys.settings import DB_NAME
-from _utils.conn import get_mysql_conn
-from _utils.nlp.tools import stopwords
+from evan_utils.conn import get_mysql_conn
+from evan_utils.nlp.tools import stopwords
 from typing import Dict
 
 

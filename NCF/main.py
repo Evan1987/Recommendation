@@ -7,7 +7,7 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from NCF.model_utils import NCF
 from NCF.data_utils import DataGenerator, load_data
 from NCF.callbacks import MetricEvaluation
-from _utils.utensorflow import get_session_config
+from evan_utils.utensorflow import get_session_config
 from constant import PROJECT_HOME
 
 

@@ -8,7 +8,7 @@ import gensim
 import numpy as np
 from collections import defaultdict
 from typing import List, Optional
-from _utils.context import timer
+from evan_utils.context import timer
 from DKN.constant import PATH
 
 MAX_TITLE_LENGTH = 10

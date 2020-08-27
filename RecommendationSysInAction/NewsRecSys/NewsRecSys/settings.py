@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
-from _utils.conn import get_settings
+from evan_utils.conn import get_settings
 
 
 SETTINGS = get_settings("mysql", type_="local")

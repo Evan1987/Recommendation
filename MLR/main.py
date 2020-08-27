@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, classification_report
 from MLR.data_utils import train_data, test_data, DataGenerator
 from MLR.model_utils import MLR
-from _utils.utensorflow import get_session_config
+from evan_utils.utensorflow import get_session_config
 from constant import PROJECT_HOME
 
 

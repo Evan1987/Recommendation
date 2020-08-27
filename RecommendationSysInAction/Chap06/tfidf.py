@@ -5,7 +5,7 @@ import jieba
 import math
 import jieba.analyse
 from collections import Counter, defaultdict
-from _utils.nlp.tools import punctuations
+from evan_utils.nlp.tools import punctuations
 from typing import List, Dict, Tuple
 
 

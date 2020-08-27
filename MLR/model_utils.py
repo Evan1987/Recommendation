@@ -1,6 +1,6 @@
 
 from tensorflow.keras import layers, optimizers, models,activations
-from _utils.utensorflow.model import KerasModel
+from evan_utils.utensorflow.model import KerasModel
 
 
 class MLR(KerasModel):

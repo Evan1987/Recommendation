@@ -7,7 +7,7 @@ import scipy.sparse as sp
 import heapq
 from tqdm import tqdm
 from RecommendationSysInAction.utils.data import LastFM
-from _utils.context import timer
+from evan_utils.context import timer
 from typing import Dict, Iterable, List, Tuple
 
 

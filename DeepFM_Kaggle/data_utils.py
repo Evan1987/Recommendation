@@ -7,7 +7,7 @@ import random
 import numpy as np
 import pandas as pd
 from tensorflow.keras.utils import Sequence
-from _utils.constant import PUBLIC_SOURCE_PATH
+from evan_utils.constant import PUBLIC_SOURCE_PATH
 
 
 SEED = 2017

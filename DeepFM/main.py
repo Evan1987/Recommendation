@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from _utils.utensorflow import get_session_config
+from evan_utils.utensorflow import get_session_config
 from DeepFM.model_utils import DeepFM
 from DeepFM.data_utils import DataGenerator, DATA_ALIAS, TEST_Y_TRUE, pad_genres
 from constant import PROJECT_HOME

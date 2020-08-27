@@ -5,7 +5,7 @@ from random import Random
 from tqdm import tqdm
 from sklearn.utils import shuffle
 from constant import PROJECT_HOME
-from _utils.dataset import load_amazon
+from evan_utils.dataset import load_amazon
 from typing import Dict
 
 

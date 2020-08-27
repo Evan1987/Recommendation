@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from _utils.utensorflow import get_session_config
+from evan_utils.utensorflow import get_session_config
 from FM_FFM.data_utils import package_home, DATA_ALIAS, TFFMDataSet, TEST_Y_TRUE
 from FM_FFM.model_utils import FM
 

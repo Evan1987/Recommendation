@@ -5,7 +5,7 @@ https://www.kaggle.com/c/porto-seguro-safe-driver-prediction/overview/evaluation
 """
 
 import numpy as np
-from _utils.metric import binary_auc
+from evan_utils.metric import binary_auc
 from typing import List, Union
 
 
